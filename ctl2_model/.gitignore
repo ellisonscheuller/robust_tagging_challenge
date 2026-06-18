@@ -6,8 +6,11 @@ __pycache__/
 # C extensions
 *.so
 
-data/*
+data/**/*
+!data/**/
 !data/**/.gitkeep
+!data/**/samples.json
+!data/**/settings.json
 conf/local/credentials.yml
 nohup.out
 *.pid

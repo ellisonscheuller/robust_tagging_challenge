@@ -1,0 +1,67 @@
+{
+    "samples": {
+        "qcd": {
+            "files": ["/eos/user/m/maglowac/P2_samples/QCD_all_flat_1761558869/data/merged.root"],
+            "type": "qcd",
+            "data": false,
+            "is_signal": false,
+            "y": 0
+        },
+        "top": {
+            "files": ["/eos/user/m/maglowac/P2_samples/TT_1760944672/data/merged.root"],
+            "type": "top",
+            "data": false,
+            "is_signal": false,
+            "y": 1
+        },
+        "minbias": {
+            "files": ["/eos/user/m/maglowac/P2_samples/MinBias_1760945623/data/merged.root"],
+            "type": "minbias",
+            "data": true,
+            "is_signal": false,
+            "y": 2
+        },
+        "dy": {
+            "files": ["/eos/user/m/maglowac/P2_samples/DY_1760632751/data/1.root"],
+            "type": "dy",
+            "data": false,
+            "is_signal": false,
+            "y": 3
+        },
+        "suep": {
+            "files": ["/eos/user/m/maglowac/P2_samples/SUEPsLatest_1771405394/data/merged.root"],
+            "type": "suep",
+            "data": false,
+            "is_signal": true,
+            "y": 4
+        },
+        "hh4b": {
+            "files": ["/eos/user/m/maglowac/P2_samples/HH4B_1760945087/data/merged.root"],
+            "type": "hh4b",
+            "data": false,
+            "is_signal": true,
+            "y": 5
+        },
+        "vbf_hinv": {
+            "files": ["/eos/user/m/maglowac/P2_samples/VBFHinv_1760945375/data/merged.root"],
+            "type": "vbf_hinv",
+            "data": false,
+            "is_signal": true,
+            "y": 6
+        },
+        "zprime": {
+            "files": ["/eos/user/m/maglowac/P2_samples/ZprimeToTauTau_M500_PU200_1754901579/data/1.root"],
+            "type": "zprime",
+            "data": false,
+            "is_signal": true,
+            "y": 7
+        },
+        "svj_m250": {
+            "files": ["/eos/user/m/maglowac/P2_samples/SVJsLatest_1771406633/data/1.root"],
+            "type": "svj_m250",
+            "data": false,
+            "is_signal": true,
+            "y": 8
+        }
+    }
+}
