@@ -6,7 +6,11 @@ __pycache__/
 # C extensions
 *.so
 
-data/
+data/*
+!data/**/.gitkeep
+conf/local/credentials.yml
+nohup.out
+*.pid
 mlruns/
 
 # Distribution / packaging
