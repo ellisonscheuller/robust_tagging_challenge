@@ -1,0 +1,83 @@
+# Shared pipeline parameters — checked into git
+
+
+load_data:
+  n_particles: 100
+  n_features: 5
+  splits:
+    train:
+      qcd: 50000
+      top: 50000
+      minbias: 400000
+      dy: 50000
+    val:
+      minbias: 50000
+      suep: 50000
+    eval:
+      minbias: 100000
+      suep: 50000
+      zprime: 50000
+      hh4b: 50000
+      svj_m250: 50000
+
+# data_processing pipeline
+data_processing:
+  n_constituents: 100
+  n_features: 12
+  n_classes: 4
+  augment: true
+  rotate: true
+  boost: true
+  beta_max: 0.95
+
+# model_training pipeline
+model_training:
+  latent_dim: 16
+  proj_dim: 16
+  ff_dim: 32
+  num_heads: 2
+  proj_k: 8
+  epochs: 400
+  batch_size: 512
+  initial_lr: 0.001
+  nce_start: 0.05
+  nce_end: 0.7
+  nce_warmup: 50
+  nce_hold: 100
+  temperature: 0.1
+  mse_weight: 0.1
+  beta_schedule:
+    - [0, 0, "constant"]
+    - [30, 0, "constant"]
+    - [60, 1.0e-8, "linear"]
+    - [150, 1.0e-7, "linear"]
+    - [250, 3.0e-7, "linear"]
+    - [350, 5.0e-7, "linear"]
+    - [400, 5.0e-7, "linear"]
+
+# model_validation pipeline
+model_validation:
+  rate_threshold: 16.0
+  n_neighbors: 5
+  label_names:
+    0: qcd
+    1: top
+    2: minbias
+    3: dy
+    4: suep
+    5: hh4b
+    6: vbf_hinv
+    7: zprime
+    8: svj_m250
+  eval_names:
+    4: suep
+    5: hh4b
+    7: zprime
+    8: svj_m250
+
+# compile pipeline
+compile:
+  fpga_part: "xcvu13p-flga2577-2-e"
+  clock_period: 5.556
+  io_type: "io_parallel"
+  backend: "Vitis"

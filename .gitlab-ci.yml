@@ -1,0 +1,56 @@
+image: continuumio/miniconda3
+
+stages:
+  - load
+  - preprocess
+  - train
+  - validate
+  - compile
+
+variables:
+  KEDRO_ENV: "base" # TODO: add production env
+
+before_script:
+  - eval "$(conda shell.bash hook)"
+  - conda env create --file=environment.yml
+  - conda activate triggerflow
+
+load_data:
+  stage: load
+  script:
+    - kedro run --pipeline=load_data
+  artifacts:
+    paths:
+      - data/02_loaded/
+
+preprocess_data:
+  stage: preprocess
+  script:
+    - kedro run --pipeline=data_processing
+  artifacts:
+    paths:
+      - data/03_preprocessed/
+
+train_model:
+  stage: train
+  script:
+    - kedro run --pipeline=model_training
+  artifacts:
+    paths:
+      - data/04_models/
+
+validate_model:
+  stage: validate
+  script:
+    - kedro run --pipeline=model_validation
+  artifacts:
+    paths:
+      - data/05_validation/
+
+compile:
+  stage: compile
+  script:
+    - kedro run --pipeline=compile
+  artifacts:
+    paths:
+      - data/06_compile/

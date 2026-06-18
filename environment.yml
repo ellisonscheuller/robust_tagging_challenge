@@ -1,0 +1,23 @@
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    - kedro
+    - kedro-viz
+    - kedro-datasets
+    - matplotlib
+    - mplhep
+    - shap
+    - scikit-learn
+    - pandas
+    - dvc
+    - shap
+    - ruff
+    - uproot
+    - awkward
+    - triggerflow
+    - coffea
+    - dask[distributed]
