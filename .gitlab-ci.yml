@@ -64,7 +64,7 @@ compile:
   extends: .before_ml
   stage: compile
   needs: [preprocess_data, train_model, validate_model]
-  tags: cern-nextgen-highmem
+  tags: [cern-nextgen-highmem]
   script:
     - export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
     - kedro run --pipeline=compile --params run_name=${RUN_NAME}_compile_model
