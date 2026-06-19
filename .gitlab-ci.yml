@@ -2,7 +2,7 @@ workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "web"
 
-image: gitlab-registry.cern.ch/ml_l1/${MODEL_NAME}:Prod
+image: gitlab-registry.cern.ch/ml_l1/ctl2_embedding_model:Prod
 
 stages:
   - load
