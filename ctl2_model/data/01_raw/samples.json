@@ -22,7 +22,7 @@
             "y": 2
         },
         "dy": {
-            "files": ["/eos/user/m/maglowac/P2_samples/DY_1760632751/data/1.root"],
+            "files": ["/eos/user/m/maglowac/P2_samples/DY_1760632751/data/merged.root"],
             "type": "dy",
             "data": false,
             "is_signal": false,
@@ -50,14 +50,14 @@
             "y": 6
         },
         "zprime": {
-            "files": ["/eos/user/m/maglowac/P2_samples/ZprimeToTauTau_M500_PU200_1754901579/data/1.root"],
+            "files": ["/eos/user/m/maglowac/P2_samples/ZprimeToTauTau_M500_PU200_1754901579/data/merged.root"],
             "type": "zprime",
             "data": false,
             "is_signal": true,
             "y": 7
         },
         "svj_m250": {
-            "files": ["/eos/user/m/maglowac/P2_samples/SVJsLatest_1771406633/data/1.root"],
+            "files": ["/eos/user/m/maglowac/P2_samples/SVJsLatest_1771406633/data/merged.root"],
             "type": "svj_m250",
             "data": false,
             "is_signal": true,

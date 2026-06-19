@@ -1,4 +1,4 @@
-# ctl2_embedding — Hardware-Efficient Trigger-Level Anomaly Detection for the LHC
+# CTL2 Embedding Model
 
 Train a quantized **Linformer encoder** (Keras 3 + HGQ) for real-time anomaly
 detection at the **L1 trigger** of the LHC, then synthesize the model into
@@ -10,8 +10,8 @@ GSEAL augmentation → training with hardware-aware quantization → validation
 (rate-vs-efficiency) → firmware synthesis (RTL + HLS) → deployable
 TriggerModel**.
 
-Built with [TriggerFlow](https://gitlab.cern.ch/maglowac/triggerflow) and
-[Kedro](https://kedro.org/) for automated, reproducible ML pipelines.
+Built with [TriggerFlow](https://gitlab.cern.ch/maglowac/triggerflow) for automated, reproducible ML pipelines.
+Note: Triggermodel abstraction not yet availible for this model.
 
 ---
 
@@ -69,14 +69,15 @@ conda env create -f environment.yml
 conda activate training-gpu
 ```
 
+or 
+
+```bash
+Pull Docker container(s) from: https://gitlab.cern.ch/ml_l1/ctl2_embedding_model/container_registry/29293
+```
+
 The environment includes Python 3.11, TensorFlow, Keras 3, HGQ, da4ml,
 hls4ml, Kedro, MLflow, and TriggerFlow.
 
-### 2. Install the package
-
-```bash
-pip install -e .
-```
 
 ### 3. Set environment variables
 
@@ -94,20 +95,9 @@ export PYTHONPATH=$(pwd)/src:$PYTHONPATH
 Input events are stored as ROOT files under `data/01_raw/`. A
 `data/01_raw/samples.json` file defines which samples to load:
 
-```json
-{
-  "samples": {
-    "qcd":     { "files": "data/01_raw/qcd.root",     "is_signal": false, "y": 0 },
-    "top":     { "files": "data/01_raw/top.root",     "is_signal": false, "y": 1 },
-    "minbias": { "files": "data/01_raw/minbias.root", "is_signal": false, "y": 2 },
-    "dy":      { "files": "data/01_raw/dy.root",      "is_signal": false, "y": 3 },
-    "suep":    { "files": "data/01_raw/suep.root",    "is_signal": true,  "y": 0 }
-  }
-}
-```
-
 A `settings.json` file controls the execution backend (Local, Condor, or
-Kubernetes).
+Kubernetes). Recommended is local with many CPU cores.
+
 
 ### Data tiers (Kedro convention)
 
@@ -124,23 +114,6 @@ Kubernetes).
 
 Configured in `conf/base/parameters.yml` under `load_data.splits`:
 
-```yaml
-load_data:
-  splits:
-    train:
-      qcd: 200
-      top: 200
-      minbias: 200
-      dy: 200
-    val:
-      minbias: 200
-      suep: 200
-    eval:
-      suep: 500
-      zprime: 500
-      hh4b: 500
-      svj_m250: 500
-```
 
 ### Preprocessing
 
@@ -160,7 +133,6 @@ All pipeline parameters live in `conf/base/parameters.yml`:
 load_data:
   n_particles: 100
   n_features: 5
-  entry_stop: 1000
   splits: { ... }
 
 # Data processing
@@ -240,15 +212,7 @@ kedro run --params run_name=my_run
 Visualize the pipeline:
 
 ```bash
-kedro viz
-```
-
-### Using the launcher script
-
-A convenience script is provided for manual execution:
-
-```bash
-bash launch.sh
+kedro viz run
 ```
 
 ---
@@ -279,7 +243,6 @@ stages:
   - train
   - validate
   - compile
-  - triggermodel
 ```
 
 ### Required CI variables
@@ -454,7 +417,7 @@ ctl2_embedding/
 │   │   ├── catalog.yml             # Data catalog (typed datasets)
 │   │   └── parameters.yml          # Shared pipeline parameters
 │   └── local/
-│       ├── credentials.yml         # (gitignored) credentials
+│       ├── credentials.yml         # mlflow credentials
 │       └── mlflow.yml              # MLflow tracking config
 │
 ├── data/                           # Data tiers (Kedro convention)
@@ -464,7 +427,7 @@ ctl2_embedding/
 │   ├── 04_models/                  # (generated) trained models
 │   ├── 05_validation/              # (generated) plots + metrics
 │   ├── 06_compile/                 # (generated) RTL + HLS
-│   └── 08_reporting/              # (generated) reports
+│   
 │
 ├── src/                            # Package root
 │   └── ctl2_embedding/
@@ -511,37 +474,11 @@ ctl2_embedding/
 │   ├── train.py
 │   ├── evaluate.py
 │   ├── synthesize.py
-│   └── convert_root_to_npz.py
-│
-└── tests/                          # Unit tests
-    ├── test_augmentation.py
-    ├── test_data_prep.py
-    ├── test_training.py
-    └── test_synthesis.py
 ```
 
 ---
 
-## Testing
 
-```bash
-export KERAS_BACKEND=tensorflow
-export PYTHONPATH=$(pwd)/src:$PYTHONPATH
-
-# Run all tests
-python tests/test_augmentation.py
-python tests/test_data_prep.py
-python tests/test_training.py
-python tests/test_synthesis.py
-```
-
-Or with pytest:
-
-```bash
-CUDA_VISIBLE_DEVICES="" pytest tests/ -v
-```
-
----
 
 ## FAQ / Troubleshooting
 
@@ -551,25 +488,3 @@ CUDA_VISIBLE_DEVICES="" pytest tests/ -v
 export PYTHONPATH=$(pwd)/src:$PYTHONPATH
 ```
 
-### Q: Keras backend not set to TensorFlow
-
-```bash
-export KERAS_BACKEND=tensorflow
-```
-
-### Q: hls4ml synthesis fails
-
-Expected. `QLinformerAttention` is not natively supported by hls4ml. The
-da4ml Verilog RTL path is the primary synthesis method.
-
-### Q: How do I change training classes?
-
-Edit `load_data.splits` in `conf/base/parameters.yml`.
-
-### Q: How do I change the target FPGA?
-
-Edit `compile.fpga_part` in `conf/base/parameters.yml`.
-
-### Q: What do ParetoFront checkpoints represent?
-
-Models with signal efficiency at 16 Hz > 1% and EBOPs < 2,000,000.

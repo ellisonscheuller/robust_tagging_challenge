@@ -68,7 +68,7 @@ class ContrastiveHGQEncoder(keras.Model):
 
         loss_nce = info_nce_loss(embeddings, labels, self.temperature)
 
-        class_weights = tf.constant([1.0, 1.0, 50.0 / 400.0, 1.0, 1.0], dtype=tf.float32)
+        class_weights = tf.constant([1.0, 1.0, 1.0, 1.0], dtype=tf.float32)
         loss_ce = keras.ops.mean(
             keras.losses.sparse_categorical_crossentropy(labels, class_probs, from_logits=False)
             * keras.ops.take(class_weights, labels)

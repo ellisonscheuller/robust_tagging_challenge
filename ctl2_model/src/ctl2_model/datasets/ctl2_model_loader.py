@@ -25,9 +25,9 @@ class ctl2_modelLoader(BaseLoader):
         pdgId_all = ak.fill_none(ak.pad_none(pdgId, N, axis=1, clip=True), 0)
 
         return ak.zip({
-            "puppi_pt": ak.to_regular(pt_all),
-            "puppi_eta": ak.to_regular(eta_all),
-            "puppi_phi": ak.to_regular(phi_all),
-            "puppi_dxy": ak.to_regular(dxy_all),
-            "puppi_pdgId": ak.to_regular(pdgId_all),
-        })
+        "L1PuppiCands_pt": ak.to_regular(pt_all),
+        "L1PuppiCands_eta": ak.to_regular(eta_all),
+        "L1PuppiCands_phi": ak.to_regular(phi_all),
+        "L1PuppiCands_dxy": ak.to_regular(dxy_all),
+        "L1PuppiCands_pdgId": ak.to_regular(pdgId_all),
+         }, depth_limit=1)

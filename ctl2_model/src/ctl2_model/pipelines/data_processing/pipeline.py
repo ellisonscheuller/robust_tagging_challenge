@@ -1,12 +1,12 @@
 """data_processing pipeline."""
 from kedro.pipeline import node, Pipeline, pipeline
-from .nodes import preprocess_and_split
+from .nodes import preprocess_and_augment
 
 
 def create_pipeline(**kwargs) -> Pipeline:
     return pipeline([
         node(
-            func=preprocess_and_split,
+            func=preprocess_and_augment,
             inputs=["ctl2_model_data_loaded", "params:data_processing", "params:load_data"],
             outputs=[
                 "processed_X_train",
