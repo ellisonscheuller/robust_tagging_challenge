@@ -10,7 +10,6 @@ stages:
   - train
   - validate
   - compile
-  - triggermodel
 
 .before_ml:
   before_script:
@@ -54,7 +53,7 @@ validate_model:
   extends: .before_ml
   stage: validate
   needs: [preprocess_data, train_model]
-  tags: [k8s-eos]
+  tags: [NVIDIA-H100-NVL]
   script:
     - kedro run --pipeline=model_validation --params run_name=${RUN_NAME}_validate_model
   artifacts:
@@ -65,7 +64,7 @@ compile:
   extends: .before_ml
   stage: compile
   needs: [preprocess_data, train_model, validate_model]
-  tags: [k8s-eos]
+  tags: cern-nextgen-highmem
   script:
     - export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
     - kedro run --pipeline=compile --params run_name=${RUN_NAME}_compile_model
@@ -74,15 +73,3 @@ compile:
     paths:
       - ${MODEL_NAME}/data/06_compile/
 
-build_fw:
-  stage: triggermodel
-  image: registry.cern.ch/ci4fpga/vivado:2024.1
-  tags: [fpga-mid]
-  needs: [compile]
-  script:
-    - cd ${MODEL_NAME}/triggermodel/firmware/firmware/
-    - TCL_FILE=$(find . -maxdepth 2 -name "*.tcl" | head -n 1)
-    - vitis_hls -f "$TCL_FILE"
-  artifacts:
-    paths:
-      - ${MODEL_NAME}/triggermodel/firmware/
