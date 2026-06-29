@@ -1,5 +1,7 @@
 import awkward as ak
 import numpy as np
+import os
+os.environ["KRB5CCNAME"] = "FILE:/tmp/krb5cc_shared"
 from .base_loader import BaseLoader
 
 

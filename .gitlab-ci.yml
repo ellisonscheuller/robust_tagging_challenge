@@ -14,7 +14,9 @@ stages:
 .before_ml:
   before_script:
     - source activate training-gpu
+    - export KRB5CCNAME=FILE:/tmp/krb5cc_shared
     - echo "${EOSPASS}" | kinit "${EOSUSER}@CERN.CH"
+    - klist
     - cd ${MODEL_NAME}
 
 load_data:
