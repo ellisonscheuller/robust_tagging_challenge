@@ -27,7 +27,8 @@ load_data:
     - kedro run --pipeline=load_data --params run_name=${RUN_NAME}_load_data
   artifacts:
     paths:
-      - ${MODEL_NAME}/data/02_loaded/
+      - ${MODEL_NAME}/data/02_loaded/${MODEL_NAME}_data.parquet
+      - ${MODEL_NAME}/data/02_loaded/${MODEL_NAME}_meta_data.json
 
 preprocess_data:
   extends: .before_ml
