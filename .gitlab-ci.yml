@@ -22,7 +22,7 @@ stages:
 load_data:
   extends: .before_ml
   stage: load
-  tags: [cern-nextgen-cpuintensive]
+  tags: [cern-nextgen-highmem]
   script:
     - kedro run --pipeline=load_data --params run_name=${RUN_NAME}_load_data
   artifacts:
@@ -33,7 +33,7 @@ preprocess_data:
   extends: .before_ml
   stage: preprocess
   needs: [load_data]
-  tags: [cern-nextgen-cpuintensive]
+  tags: [cern-nextgen-highmem]
   script:
     - kedro run --pipeline=data_processing --params run_name=${RUN_NAME}_process_data
   artifacts:
