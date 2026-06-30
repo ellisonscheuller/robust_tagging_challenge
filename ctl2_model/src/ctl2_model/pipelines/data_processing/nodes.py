@@ -3,7 +3,7 @@ import mlflow
 import numpy as np
 import pandas as pd
 
-from .preprocessing import preprocess_dataset, compute_normalization_constants, build_pid_mapping
+from ctl2_model.utils.preprocessing import preprocess_dataset, compute_normalization_constants, build_pid_mapping
 from ctl2_model.augmentation.gseal import GSEALAugmentation
 from ctl2_model.utils.plotting import plot_data_distributions, plot_pid_distributions
 
