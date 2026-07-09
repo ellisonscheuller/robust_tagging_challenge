@@ -170,7 +170,7 @@ class TriggerRateCallback(keras.callbacks.Callback):
         logs = logs or {}
         scores = self._anomaly_scores()
         bkg_mask = self.y_val == self.minbias_label
-        sig_mask = self.y_val == self.signal_label
+        sig_mask = ~bkg_mask
         scores_bkg = scores[bkg_mask]
         scores_sig = scores[sig_mask]
 

@@ -10,6 +10,7 @@ load_data:
       top: 50000
       minbias: 400000
       dy: 50000
+      suep: 50000
     val:
       minbias: 50000
       suep: 50000
@@ -29,6 +30,16 @@ data_processing:
   rotate: true
   boost: true
   beta_max: 0.95
+  label_names:
+    0: qcd
+    1: top
+    2: minbias
+    3: dy
+    4: suep
+    5: hh4b
+    6: vbf_hinv
+    7: zprime
+    8: svj_m250
 
 # model_training pipeline
 model_training:
@@ -74,6 +85,7 @@ model_validation:
     5: hh4b
     7: zprime
     8: svj_m250
+    6: vbf_hinv
 
 # compile pipeline
 compile:

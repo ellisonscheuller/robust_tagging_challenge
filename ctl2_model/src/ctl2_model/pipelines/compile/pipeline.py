@@ -20,7 +20,8 @@ def create_pipeline(**kwargs) -> Pipeline:
             ],
             outputs=[
                 "synthesized_rtl_dir",
-                "synthesized_hls_dir",
+                "synthesized_hls_da4ml_dir",
+                "synthesized_hls_hls4ml_dir",
                 "synthesis_report",
                 "compile_physics_metrics",
             ],

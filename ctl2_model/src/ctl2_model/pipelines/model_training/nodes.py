@@ -223,6 +223,7 @@ def train_model(
         print("  No checkpoint with ebops < 2M found, using final model")
 
     best_encoder.save(str(save_path / "trained_model.keras"))
+    mlflow.log_artifact(str(save_path / "trained_model.keras"))
     mlflow.log_metrics(selected_metrics)
 
     return encoder, history
