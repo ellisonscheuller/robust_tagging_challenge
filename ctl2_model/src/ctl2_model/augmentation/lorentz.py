@@ -63,8 +63,8 @@ def boost_3d(
 
     L = keras.ops.zeros((n, 4, 4), dtype=dtype)
     L = keras.ops.slice_update(L, (0, 0, 0), gamma[:, None, None])
-    L = keras.ops.slice_update(L, (0, 0, 1), (-gamma[:, None] * beta)[:, None, :])
-    L = keras.ops.slice_update(L, (0, 1, 0), (-gamma[:, None] * beta)[:, None, :])
+    L = keras.ops.slice_update(L, (0, 0, 1), (-gamma[:, None] * beta)[:, None, :])  
+    L = keras.ops.slice_update(L, (0, 1, 0), (-gamma[:, None] * beta)[:, :, None])  
 
     outer_beta = keras.ops.einsum("...i,...j->...ij", beta, beta)
     factor = (gamma - 1)[:, None, None] / (beta_sq[:, None, None] + 1e-10)

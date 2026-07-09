@@ -18,6 +18,7 @@ def preprocess_and_augment(
     rotate = data_processing.get("rotate", True)
     boost = data_processing.get("boost", True)
     beta_max = data_processing.get("beta_max", 0.95)
+    label_names = data_processing.get("label_names", {})
 
     raw_tensor = np.stack([
         np.vstack(data["L1PuppiCands_pt"].values).astype(np.float32),
@@ -88,7 +89,7 @@ def preprocess_and_augment(
         "n_features": X_train.shape[-1] if len(X_train) else 0,
         "n_constituents": X_train.shape[1] if len(X_train) else 0,
     })
-    dist_path = plot_data_distributions(X_train, y_train)
+    dist_path = plot_data_distributions(X_train, y_train, label_names=label_names)
     mlflow.log_artifact(dist_path)
     pid_dist_path = plot_pid_distributions(X_train, pid_mapping)
     if pid_dist_path:

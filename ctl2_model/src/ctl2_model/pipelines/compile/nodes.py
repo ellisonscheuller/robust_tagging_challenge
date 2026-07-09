@@ -8,7 +8,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import mlflow
 import numpy as np
-from hgq.utils import trace_minmax
 
 from ctl2_model.synthesis.model_surgery import (
     truncate_at_cls_hidden,
@@ -18,9 +17,10 @@ from ctl2_model.synthesis.model_surgery import (
 from ctl2_model.synthesis.trace_and_synth import (
     trace_comb,
     generate_rtl,
+    generate_hls_da4ml,
     generate_hls_hls4ml,
 )
-from ctl2_model.synthesis.validate import compare_predictions
+from ctl2_model.synthesis.validate import compare_predictions, compare_hls
 from ctl2_model.evaluation.anomaly_score import (
     ClassifierAnomalyScore,
     efficiency_at_rate,
@@ -129,23 +129,46 @@ def compile_model(
         save_path=str(output_dir / "keras_vs_verilog.png"),
     )
 
+    try:
+        hls_da4ml_dir = output_dir / "hls_da4ml"
+        hls_da4ml_model = generate_hls_da4ml(
+            comb_logic,
+            prj_name="ctl2_embedding",
+            output_dir=str(hls_da4ml_dir),
+            part_name=fpga_part,
+            clock_period=clock_period,
+        )
+        hls_da4ml_generated = True
+        compare_hls(
+            classifier, hls_da4ml_model, x_val,
+            save_path=str(output_dir / "keras_vs_hls_da4ml.png"),
+        )
+    except Exception as e:
+        print(f"  da4ml HLS skipped: {e}")
+        hls_da4ml_generated = False
+        hls_da4ml_dir = None
+
     classifier_clean = clean_model_for_hls4ml(classifier)
     save_model_surgery_report(classifier_clean, output_dir)
 
     try:
-        hls_dir = output_dir / "hls4ml"
-        hls_model = generate_hls_hls4ml(
+        hls_hls4ml_dir = output_dir / "hls_hls4ml"
+        hls_hls4ml_model = generate_hls_hls4ml(
             classifier_clean,
-            output_dir=str(hls_dir),
+            output_dir=str(hls_hls4ml_dir),
             part_name=fpga_part,
             io_type=io_type,
             clock_period=clock_period,
         )
-        hls_generated = True
+        hls_hls4ml_generated = True
+        compare_hls(
+            classifier, hls_hls4ml_model, x_val,
+            save_path=str(output_dir / "keras_vs_hls_hls4ml.png"),
+        )
     except Exception as e:
         print(f"  hls4ml skipped: {e}")
-        hls_generated = False
-        hls_dir = None
+        hls_hls4ml_generated = False
+        hls_hls4ml_dir = None
 
     report = {
         "fpga_part": fpga_part,
@@ -153,8 +176,10 @@ def compile_model(
         "io_type": io_type,
         "backend": backend,
         "rtl_dir": str(rtl_dir),
-        "hls_dir": str(hls_dir) if hls_dir else None,
-        "hls_generated": hls_generated,
+        "hls_da4ml_dir": str(hls_da4ml_dir) if hls_da4ml_dir else None,
+        "hls_da4ml_generated": hls_da4ml_generated,
+        "hls_hls4ml_dir": str(hls_hls4ml_dir) if hls_hls4ml_dir else None,
+        "hls_hls4ml_generated": hls_hls4ml_generated,
     }
     if hasattr(rtl_model, "_pipe"):
         report["estimated_luts"] = getattr(rtl_model._pipe, "cost", None)
@@ -183,7 +208,11 @@ def compile_model(
             mlflow.log_artifact(str(src_path))
 
     mlflow.log_artifact(str(output_dir / "keras_vs_verilog.png"))
-    for tag, d in [("rtl", rtl_dir), ("hls", hls_dir)]:
+    if hls_da4ml_generated and (output_dir / "keras_vs_hls_da4ml.png").exists():
+        mlflow.log_artifact(str(output_dir / "keras_vs_hls_da4ml.png"))
+    if hls_hls4ml_generated and (output_dir / "keras_vs_hls_hls4ml.png").exists():
+        mlflow.log_artifact(str(output_dir / "keras_vs_hls_hls4ml.png"))
+    for tag, d in [("rtl", rtl_dir), ("hls_da4ml", hls_da4ml_dir), ("hls_hls4ml", hls_hls4ml_dir)]:
         if d is not None and d.exists() and any(d.iterdir()):
             archive = output_dir / f"{tag}.zip"
             shutil.make_archive(str(output_dir / tag), "zip", d)
@@ -200,4 +229,4 @@ def compile_model(
         model_validation,
     )
 
-    return rtl_dir, hls_dir, report, physics_metrics
+    return rtl_dir, hls_da4ml_dir, hls_hls4ml_dir, report, physics_metrics

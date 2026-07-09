@@ -610,7 +610,7 @@ def plot_data_distributions(
     max_features: int = 12,
     save_path: str = "data/05_validation/data_distributions.png",
 ):
-    if label_names is None:
+    if not label_names:
         label_names = {"0": "qcd", "1": "top", "2": "minbias", "3": "dy"}
     n_features = min(X.shape[-1], max_features)
     names = FEATURE_NAMES[:n_features]
@@ -628,7 +628,7 @@ def plot_data_distributions(
             ax = axes[i]
             for c, color in zip(classes, colors):
                 mask = (y[:, None] == c) & pad_mask
-                name = label_names.get(str(c), f"class_{c}")
+                name = label_names.get(c, label_names.get(str(c), f"class_{c}"))
                 ax.hist(X[mask, i].ravel(), bins=64, density=True,
                         histtype="step", linewidth=1.5, color=color, label=name)
             ax.set_xlabel(names[i])
@@ -645,7 +645,7 @@ def plot_data_distributions(
 
     if y is not None:
         ax = axes[n_features]
-        counts = {label_names.get(str(c), f"class_{c}"): (y == c).sum() for c in classes}
+        counts = {label_names.get(c, label_names.get(str(c), f"class_{c}")): (y == c).sum() for c in classes}
         names_bar = list(counts.keys())
         values_bar = list(counts.values())
         colors_bar = [plt.cm.tab10(i % 10) for i in range(len(names_bar))]
