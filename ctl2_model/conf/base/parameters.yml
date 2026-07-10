@@ -48,7 +48,7 @@ model_training:
   ff_dim: 32
   num_heads: 2
   proj_k: 8
-  epochs: 400
+  epochs: 200
   batch_size: 512
   initial_lr: 0.001
   nce_start: 0.05
@@ -59,12 +59,7 @@ model_training:
   mse_weight: 0.1
   beta_schedule:
     - [0, 0, "constant"]
-    - [30, 0, "constant"]
-    - [60, 1.0e-8, "linear"]
-    - [150, 1.0e-7, "linear"]
-    - [250, 3.0e-7, "linear"]
-    - [350, 5.0e-7, "linear"]
-    - [400, 5.0e-7, "linear"]
+    - [200, 0, "constant"]
 
 # model_validation pipeline
 model_validation:

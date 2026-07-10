@@ -1,6 +1,4 @@
-from hgq.layers import QDense, QAdd, QSum, QLinformerAttention
-from hgq.constraints import MinMax
-from hgq.regularizers import MonoL1
+from hgq.layers import QDense, QAdd, QSum, QMultiHeadAttention
 from hgq.config import QuantizerConfigScope, LayerConfigScope
 import keras
 
@@ -25,38 +23,31 @@ def get_linformer(
     n = 3 if pt_eta_phi else n_features
     N = n_constituents
 
-    scope0 = QuantizerConfigScope(k0=1, b0=8, i0=1, br=MonoL1(1e-8), overflow_mode="WRAP")
-    scope1 = QuantizerConfigScope(
-        place="datalane", k0=1, f0=6, fr=MonoL1(1e-8), ir=MonoL1(1e-8)
-    )
-    mhaconf = QuantizerConfigScope(
-        k0=1, i0=1, f0=6, round_mode="RND", overflow_mode="SAT", bc=MinMax(1, 8)
+    quant_cfg = QuantizerConfigScope(
+        b0=15, k0=1, i0=8, round_mode="RND", overflow_mode="SAT_SYM",
+        default_q_type='kbi',
     )
     betascope = LayerConfigScope(enable_ebops=True, beta0=beta0)
 
-    with betascope, scope0, scope1:
+    with betascope, quant_cfg:
         inp = keras.layers.Input((N, n))
 
         emb = QDense(ff_dim, activation="relu")(inp)
 
-        with mhaconf:
-            x = QLinformerAttention(
-                num_heads,
-                key_dim=ff_dim // num_heads,
-                lin_kv_proj_dim=proj_k,
-                name="attention1",
-                dropout=0,
-            )(emb, emb, emb)
+        x = QMultiHeadAttention(
+            num_heads,
+            key_dim=ff_dim // num_heads,
+            name="attention1",
+            dropout=0,
+        )(emb, emb, emb)
         res = QAdd()([x, emb])
 
-        with mhaconf:
-            x = QLinformerAttention(
-                num_heads,
-                key_dim=ff_dim // num_heads,
-                lin_kv_proj_dim=proj_k,
-                name="attention2",
-                dropout=0,
-            )(res, res, res)
+        x = QMultiHeadAttention(
+            num_heads,
+            key_dim=ff_dim // num_heads,
+            name="attention2",
+            dropout=0,
+        )(res, res, res)
         res = QAdd()([x, res])
 
         x = QSum(axes=1)(res) / N

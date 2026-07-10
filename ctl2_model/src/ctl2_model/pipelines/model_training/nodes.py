@@ -42,11 +42,7 @@ def train_model(
     signal_label = model_training.get("signal_label", 1)
     beta_schedule = model_training.get("beta_schedule", [
         [0, 0, "constant"],
-        [100, 0, "constant"],
-        [150, 5.0e-8, "linear"],
-        [200, 5.0e-7, "linear"],
-        [250, 6.6e-7, "linear"],
-        [400, 1.0e-5, "linear"],
+        [200, 0, "constant"],
     ])
     n_features = X_train.shape[-1]
     n_constituents = X_train.shape[1]
