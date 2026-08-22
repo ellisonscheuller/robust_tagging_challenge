@@ -1,7 +1,0 @@
-{
-    "output_dir": "./data/02_loaded/",
-    "run_local": true,
-    "num_workers": 31,
-    "chunksize": 25000,
-    "cluster_type": "local"
-}

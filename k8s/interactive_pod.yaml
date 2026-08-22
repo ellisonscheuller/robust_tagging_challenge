@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: embed-pod
+
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: nvidia.com/gpu.product
+            operator: In
+            values:
+              - "Tesla-V100-SXM2-32GB"
+              - "NVIDIA-A100-PCIE-40GB"
+              - "NVIDIA-RTX-A6000"
+              # - "NVIDIA-L40"
+              # - "NVIDIA-A100-80GB-PCIe"
+              # - "NVIDIA-A100-SXM4-80GB"
+  containers:
+  - name: gpu-container
+    image: gitlab-registry.nrp-nautilus.io/mquinnan/axol1tl-hub:axol1tl-container
+    command: ["sleep", "infinity"]
+    env:
+      - name: WANDB_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: wandb-secrets
+            key: WANDB_API_KEY
+      - name: GIT_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: gitlabcern-secrets
+            key: GIT_TOKEN
+      - name: GIT_USER
+        valueFrom:
+          secretKeyRef:
+            name: gitlabcern-secrets
+            key: GIT_USER
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+        memory: 32Gi
+        cpu: 8
+      requests:
+        nvidia.com/gpu: 1
+        memory: 32Gi
+        cpu: 8
+    volumeMounts:
+    - mountPath: /embedvol
+      name: embedvol
+    # - name: embedcvmfs
+    #   mountPath: /cvmfs
+    #   mountPropagation: HostToContainer
+  restartPolicy: Never
+  volumes:
+    - name: embedvol
+      persistentVolumeClaim:
+        claimName: embedvol
+    # - name: embedcvmfs
+    #   persistentVolumeClaim:
+    #     claimName: embedcvmfs
+    
+  tolerations:
+    - key: "nautilus.io/axol1tl"
+      operator: "Exists"
+      effect: "NoSchedule"
