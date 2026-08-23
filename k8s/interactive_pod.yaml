@@ -31,12 +31,12 @@ spec:
       - name: GIT_TOKEN
         valueFrom:
           secretKeyRef:
-            name: gitlabcern-secrets
+            name: github-secrets
             key: GIT_TOKEN
       - name: GIT_USER
         valueFrom:
           secretKeyRef:
-            name: gitlabcern-secrets
+            name: github-secrets
             key: GIT_USER
     resources:
       limits:

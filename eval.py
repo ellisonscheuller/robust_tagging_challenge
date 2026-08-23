@@ -1,35 +1,6 @@
-"""
-Challenge 9 evaluation script.
-
-What participants get out of this:
-  - tsne_latents.png        latent space colored by class (nominal data)
-  - auc_vs_severity.png     robustness curve: a linear probe trained on
-                             nominal latents, evaluated on degraded latents
-                             at increasing eta-phi dropout severity
-
-Everything else from earlier eval scripts (PCA, KDE, Mahalanobis anomaly
-score, Fisher pairwise ROC) has been dropped — not needed for this challenge.
-
-Data contract:
-  --data          nominal event tensor, [E, N, F+1] with the label in the
-                  last channel of each event's row 0 (same convention as
-                  embedding.utils.data_utils.load_data/clean_data).
-  --degraded_dir  directory of degraded versions of the SAME events (same
-                  order, same labels), one file per severity level, each in
-                  the same [E, N, F+1] format. Files are matched by the
-                  first integer found in their name (e.g. severity_10.pt,
-                  sev10.pt, ..._10pct.pt all parse as severity 10).
-
-Run with --diagnostics to additionally produce
-tsne_zero_fraction_diagnostic.png — an internal sanity check, not something
-participants need. Candidates dropped by degradation are zeroed the same
-way padding rows already are (pt == 0), so this checks whether the model is
-organizing its latent space around "how much of this event is padding"
-rather than genuine class/physics content.
-"""
-
 import argparse
 import glob
+import importlib
 import os
 import re
 
@@ -47,10 +18,7 @@ from embedding.dataloader import PFCandsDataset, PUPPIDataset
 from embedding.utils.data_utils import load_data, delta_r_from_normalized
 from embedding.utils.cfg_handler import train_config, data_config
 
-
 def build_preproc_and_encoder(cfg: train_config, checkpoint: dict, device: str):
-    import importlib
-
     preproc_type = cfg.get_trdata_cfg("preproc_type", "PFPreProcessor")
     preproc_class = getattr(importlib.import_module("embedding.preprocs"), preproc_type)
     norm_constants = checkpoint["norm_constants"]
@@ -74,15 +42,8 @@ def build_preproc_and_encoder(cfg: train_config, checkpoint: dict, device: str):
 
     return preproc, encoder, norm_constants
 
-
 @torch.no_grad()
 def embed_dataset(preproc, encoder, feature_block, label_block, cfg_data, norm_constants, device, batch_size=1024):
-    """
-    Runs an [E, N, F] tensor through preproc -> encoder and returns per-event
-    latents, labels, and the fraction of candidate slots that are zeroed
-    (pt == 0 — padding and/or dropped-by-degradation, indistinguishable by
-    design; see module docstring).
-    """
     pfcands = cfg_data.get("pfcands", True)
     dataset_cls = PFCandsDataset if pfcands else PUPPIDataset
     dataset = dataset_cls(feature_block, label_block, device)
@@ -107,7 +68,6 @@ def embed_dataset(preproc, encoder, feature_block, label_block, cfg_data, norm_c
 
     return torch.cat(latents), torch.cat(labels), torch.cat(zero_frac)
 
-
 def train_linear_probe(X_train, y_train, num_classes, device, epochs=20):
     probe = EvalMLP(input_dim=X_train.shape[1], num_classes=num_classes).to(device)
     optimizer = optim.Adam(probe.parameters(), lr=1e-3)
@@ -128,7 +88,6 @@ def train_linear_probe(X_train, y_train, num_classes, device, epochs=20):
     probe.eval()
     return probe
 
-
 @torch.no_grad()
 def probe_auc(probe, X, y, num_classes, device):
     probs = torch.softmax(probe(X.to(device)), dim=1).cpu().numpy()
@@ -137,13 +96,12 @@ def probe_auc(probe, X, y, num_classes, device):
         return roc_auc_score(y, probs[:, 1])
     return roc_auc_score(y, probs, multi_class="ovr", average="macro")
 
-
 def parse_severity(path: str) -> int:
+    # severity_10.pt, sev10.pt, ..._10pct.pt all parse as 10
     match = re.search(r"\d+", os.path.basename(path))
     if match is None:
-        raise ValueError(f"Could not parse a severity level out of filename: {path}")
+        raise ValueError(f"could not parse a severity level out of filename: {path}")
     return int(match.group())
-
 
 def plot_tsne_by_class(latents, labels, label_name_map, outdir):
     coords = TSNE(n_components=2, init="random", random_state=42, perplexity=50).fit_transform(latents.numpy())
@@ -159,7 +117,6 @@ def plot_tsne_by_class(latents, labels, label_name_map, outdir):
     plt.savefig(os.path.join(outdir, "tsne_latents.png"), dpi=300)
     plt.close()
 
-
 def plot_auc_vs_severity(severities, aucs, outdir):
     plt.figure(figsize=(7, 5))
     plt.plot(severities, aucs, marker="o")
@@ -172,22 +129,19 @@ def plot_auc_vs_severity(severities, aucs, outdir):
     plt.close()
 
     area = np.trapz(aucs, severities) / (severities[-1] - severities[0])
-    print(f"Robustness summary: area under AUC-vs-severity curve = {area:.4f} (1.0 = perfectly flat at AUC 1.0)")
-
+    print(f"area under AUC-vs-severity curve: {area:.4f}")
 
 def plot_tsne_zero_fraction(latents, zero_frac, outdir):
     coords = TSNE(n_components=2, init="random", random_state=42, perplexity=50).fit_transform(latents.numpy())
 
     plt.figure(figsize=(8, 6))
     sc = plt.scatter(coords[:, 0], coords[:, 1], s=5, c=zero_frac.numpy(), cmap="viridis", alpha=0.5)
-    plt.colorbar(sc, label="fraction of candidates zeroed (padding + dropped)")
+    plt.colorbar(sc, label="fraction of candidates zeroed")
     plt.xlabel("t-SNE 1")
     plt.ylabel("t-SNE 2")
-    plt.title("Diagnostic: does the latent space track zero-fraction?")
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, "tsne_zero_fraction_diagnostic.png"), dpi=300)
     plt.close()
-
 
 def main(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -215,7 +169,7 @@ def main(args):
 
     severity_files = sorted(glob.glob(os.path.join(args.degraded_dir, "*.pt")), key=parse_severity)
     if not severity_files:
-        raise FileNotFoundError(f"No .pt files found in --degraded_dir: {args.degraded_dir}")
+        raise FileNotFoundError(f"no .pt files found in --degraded_dir: {args.degraded_dir}")
 
     severities = [0]
     aucs = [probe_auc(probe, X_test, y_test, num_classes, device)]
@@ -237,14 +191,13 @@ def main(args):
     if args.diagnostics:
         plot_tsne_zero_fraction(torch.cat(diag_latents), torch.cat(diag_zero_frac), args.outdir)
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--train_cfg", required=True, help="Same train config .yaml used to train the encoder")
-    parser.add_argument("--data_cfg", required=True, help="Same data config .yaml used to train the encoder")
+    parser.add_argument("--train_cfg", required=True, help="Train config .yaml used to train the encoder")
+    parser.add_argument("--data_cfg", required=True, help="Data config .yaml used to train the encoder")
     parser.add_argument("--encoder", required=True, help="Path to a checkpoint saved by train.py")
     parser.add_argument("--data", required=True, help="Nominal (non-degraded) eval .pt file")
     parser.add_argument("--degraded_dir", required=True, help="Directory of per-severity degraded eval .pt files")
     parser.add_argument("--outdir", default="./evalPlots")
-    parser.add_argument("--diagnostics", action="store_true", help="Also produce the zero-fraction latent-space diagnostic (organizer use, not needed by participants)")
+    parser.add_argument("--diagnostics", action="store_true", help="Also produce the zero-fraction latent diagnostic")
     main(parser.parse_args())

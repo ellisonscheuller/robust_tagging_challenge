@@ -25,10 +25,9 @@ spec:
           - |
             set -e
             echo "Cloning repository..."
-            git clone https://${GIT_USER}:${GIT_TOKEN}@gitlab.cern.ch/rcruzcan/self-supervised-learning.git
-            cd self-supervised-learning/
-            git checkout rcruzcan_dev
-            
+            git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/ellisonscheuller/challenge9.git
+            cd challenge9/
+
             echo "Installing dependencies..."
             pip3 install .
             pip3 install wandb
@@ -38,8 +37,9 @@ spec:
               --data_cfg=/embedvol/configs/data_config_smcocktail.yaml \
               --train_cfg=/embedvol/configs/train_config_hlt.yaml \
               --data=/embedvol/embedding_hlt_smcocktail_train.pt \
+              --degraded_data=/embedvol/embedding_hlt_smcocktail_train_degraded.pt \
               --outdir=/embedvol/ \
-              --test_train
+              --test_mode
         env:
           - name: WANDB_API_KEY
             valueFrom:
@@ -49,12 +49,12 @@ spec:
           - name: GIT_TOKEN
             valueFrom:
               secretKeyRef:
-                name: gitlabcern-secrets
+                name: github-secrets
                 key: GIT_TOKEN
           - name: GIT_USER
             valueFrom:
               secretKeyRef:
-                name: gitlabcern-secrets
+                name: github-secrets
                 key: GIT_USER
         resources:
           limits:

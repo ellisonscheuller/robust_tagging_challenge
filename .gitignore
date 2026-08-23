@@ -15,4 +15,5 @@ data/
 *.pth
 *.ipynb
 *.yaml
+!codabench/**/*.yaml
 *.pt

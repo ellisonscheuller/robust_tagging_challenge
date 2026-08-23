@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import LambdaLR
-from embedding.dataloader import PFCandsDataset, PUPPIDataset
+from embedding.dataloader import PFCandsDataset, PUPPIDataset, PairedDataset
 from embedding.utils.data_utils import delta_r_from_normalized
 from embedding.utils.data_utils import EPS
 from typing import Union
@@ -58,17 +58,15 @@ def make_train_val_split(features, y, val_size=0.10, random_state=42, y_are_labe
     return X_tr, y_tr, X_val, y_val, idx_tr, idx_val
 
 def build_train_val_loaders(
-    X_tr, y_tr, X_val, y_val, device, batch_size=2048, pfcands=False
+    X_tr, X_tr_aug, y_tr, X_val, X_val_aug, y_val, device, batch_size=2048, pfcands=False
 ):
     """
-    Builds DataLoaders. IMPORTANT: pass TRAIN norm_constants to BOTH loaders.
+    Builds paired (nominal, degraded) DataLoaders. IMPORTANT: pass TRAIN norm_constants to BOTH loaders.
     """
-    if pfcands:
-        ds_tr  = PFCandsDataset(X_tr,  y_tr, device)
-        ds_val = PFCandsDataset(X_val, y_val, device)
-    else:
-        ds_tr  = PUPPIDataset(X_tr,  y_tr,  device=device)
-        ds_val = PUPPIDataset(X_val, y_val, device=device)
+    ds_cls = PFCandsDataset if pfcands else PUPPIDataset
+
+    ds_tr  = PairedDataset(ds_cls(X_tr,  y_tr,  device), ds_cls(X_tr_aug,  y_tr,  device))
+    ds_val = PairedDataset(ds_cls(X_val, y_val, device), ds_cls(X_val_aug, y_val, device))
 
     train_loader = DataLoader(ds_tr,  batch_size=batch_size, shuffle=True,  num_workers=0)
     val_loader   = DataLoader(ds_val, batch_size=batch_size, shuffle=False, num_workers=0)
@@ -76,7 +74,7 @@ def build_train_val_loaders(
 
 def train_epoch(
     encoder, projector, classifier,
-    ce_loss_fn, contrastive_loss,  # contrastive_loss =  InfoNCE (supervised) or SSL loss
+    ce_loss_fn, contrastive_loss,  # contrastive_loss = SupConLoss over (nominal, degraded) views
     train_loader, norm_constants, device,
     optimizer, preproc, scheduler=None, contrastive_weight=0.05,
     pairwise=False, num_classes=4,
@@ -93,34 +91,43 @@ def train_epoch(
     scheduled_contrst_wght = not (isinstance(contrastive_weight, int) or isinstance(contrastive_weight, float))
     class_metrics = ClassificationMetrics(num_classes)
 
-    for x, mask, labels in train_loader:
-        x = x.to(device)
-        mask = mask.to(device)
+    for x_in, mask_in, x_aug, mask_aug, labels in train_loader:
+        x_in = x_in.to(device)
+        mask_in = mask_in.to(device)
+        x_aug = x_aug.to(device)
+        mask_aug = mask_aug.to(device)
         labels = labels.to(device)
 
         # prepend CLS bit
-        mask = torch.cat([
-            torch.zeros(mask.size(0), 1, device=mask.device, dtype=torch.bool),
-            mask.bool()
+        mask_in = torch.cat([
+            torch.zeros(mask_in.size(0), 1, device=mask_in.device, dtype=torch.bool),
+            mask_in.bool()
+        ], dim=1)
+        mask_aug = torch.cat([
+            torch.zeros(mask_aug.size(0), 1, device=mask_aug.device, dtype=torch.bool),
+            mask_aug.bool()
         ], dim=1)
 
-        delta_r = delta_r_from_normalized(x, norm_constants) if pairwise else None
+        delta_r_in = delta_r_from_normalized(x_in, norm_constants) if pairwise else None
+        delta_r_aug = delta_r_from_normalized(x_aug, norm_constants) if pairwise else None
 
         use_amp = (device == "cuda") and (scaler is not None) and scaler.is_enabled()
         optimizer.zero_grad()
 
         with torch.cuda.amp.autocast(enabled=use_amp):
-            x = preproc(x)
-            latent = encoder(x, delta_r, mask)
-            embeddings = F.normalize(projector(latent), dim=1)
+            latent_in = encoder(preproc(x_in), delta_r_in, mask_in)
+            latent_aug = encoder(preproc(x_aug), delta_r_aug, mask_aug)
+            embeddings_in = F.normalize(projector(latent_in), dim=1)
+            embeddings_aug = F.normalize(projector(latent_aug), dim=1)
 
-            loss_constrast = contrastive_loss(embeddings, labels)
-            logits   = classifier(embeddings)
+            paired = torch.stack([embeddings_in, embeddings_aug], dim=1)
+            loss_constrast = contrastive_loss(paired, labels)
+            logits   = classifier(embeddings_in)
             loss_ce  = ce_loss_fn(logits, labels)
 
             contrast_weight_value = contrastive_weight.get() if scheduled_contrst_wght else contrastive_weight
             loss = contrast_weight_value * loss_constrast + loss_ce
-        
+
         if use_amp:
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -137,7 +144,7 @@ def train_epoch(
         if torch.isnan(loss):
             print("NaN loss detected, skipping update")
 
-        bs = x.size(0)
+        bs = x_in.size(0)
         total_loss += loss.item() * bs
         total_contrast  += loss_constrast.item() * bs
         total_ce   += loss_ce.item() * bs
@@ -169,30 +176,39 @@ def validate_epoch(
     scheduled_contrst_wght = not (isinstance(contrastive_weight, int) or isinstance(contrastive_weight, float))
     class_metrics = ClassificationMetrics(num_classes)
 
-    for x, mask, labels in val_loader:
-        x = x.to(device)
-        mask = mask.to(device)
+    for x_in, mask_in, x_aug, mask_aug, labels in val_loader:
+        x_in = x_in.to(device)
+        mask_in = mask_in.to(device)
+        x_aug = x_aug.to(device)
+        mask_aug = mask_aug.to(device)
         labels = labels.to(device)
 
-        mask = torch.cat([
-            torch.zeros(mask.size(0), 1, device=mask.device, dtype=torch.bool),
-            mask.bool()
+        mask_in = torch.cat([
+            torch.zeros(mask_in.size(0), 1, device=mask_in.device, dtype=torch.bool),
+            mask_in.bool()
+        ], dim=1)
+        mask_aug = torch.cat([
+            torch.zeros(mask_aug.size(0), 1, device=mask_aug.device, dtype=torch.bool),
+            mask_aug.bool()
         ], dim=1)
 
-        delta_r = delta_r_from_normalized(x, norm_constants) if pairwise else None
+        delta_r_in = delta_r_from_normalized(x_in, norm_constants) if pairwise else None
+        delta_r_aug = delta_r_from_normalized(x_aug, norm_constants) if pairwise else None
 
-        x = preproc(x)
-        latent = encoder(x, delta_r, mask)
-        embeddings = F.normalize(projector(latent), dim=1)
+        latent_in = encoder(preproc(x_in), delta_r_in, mask_in)
+        latent_aug = encoder(preproc(x_aug), delta_r_aug, mask_aug)
+        embeddings_in = F.normalize(projector(latent_in), dim=1)
+        embeddings_aug = F.normalize(projector(latent_aug), dim=1)
 
-        loss_constrast = contrastive_loss(embeddings, labels)
-        logits   = classifier(embeddings)
+        paired = torch.stack([embeddings_in, embeddings_aug], dim=1)
+        loss_constrast = contrastive_loss(paired, labels)
+        logits   = classifier(embeddings_in)
         loss_ce  = ce_loss_fn(logits, labels)
- 
+
         contrast_weight_value = contrastive_weight.get() if scheduled_contrst_wght else contrastive_weight
         loss = contrast_weight_value * loss_constrast + (1 - contrast_weight_value) * loss_ce
 
-        bs = x.size(0)
+        bs = x_in.size(0)
         total_loss += loss.item() * bs
         total_contrast  += loss_constrast.item() * bs
         total_ce   += loss_ce.item() * bs

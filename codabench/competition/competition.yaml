@@ -1,0 +1,65 @@
+version: 2
+title: Challenge 9 - Robust Tagging Under Changing Detector Conditions
+description: Train a representation that stays robust when parts of the eta-phi plane go dead (simulated detector degradation), scored by AUC vs. degradation severity.
+image: icon.png
+registration_auto_approve: True
+
+## Image used both when codabench runs the user submission and
+## to create notebooks on Kubeflow.
+docker_image: registry.cern.ch/REPLACE_ME/challenge9:v0.0.1
+
+## Queues define the kind and number of GPUs that submissions can use
+## Choose your queue here: https://ngt.cern.ch/challenges/queues/
+queue: REPLACE_ME
+
+terms: pages/terms.md
+pages:
+  - title: Quick Start
+    file: pages/quick_start.md
+  - title: Submission Details
+    file: pages/submission_details.md
+  - title: Data Description
+    file: pages/data_description.md
+
+tasks:
+  - index: 0
+    name: Development Task
+    description: 'Tune models against the public validation split.'
+    ingestion_program: ingestion_program/
+    scoring_program: scoring_program/
+  - index: 1
+    name: Final Task
+    description: 'Train your final model, scored against a held-out test split.'
+    ingestion_program: ingestion_program/
+    scoring_program: scoring_program/
+
+solutions:
+  - index: 0
+    tasks:
+    - 0
+    - 1
+    path: solution/
+
+phases:
+  - name: Development Phase
+    description: 'Development phase: tune your models.'
+    start: REPLACE_ME
+    end: REPLACE_ME
+    tasks:
+      - 0
+  - name: Testing Phase
+    description: 'Final phase: scored against unseen data.'
+    max_submissions: 1
+    start: REPLACE_ME
+    end: REPLACE_ME
+    tasks:
+      - 1
+
+leaderboards:
+  - title: Results
+    key: main
+    columns:
+      - title: Robustness Score (AUC vs. severity, area under curve)
+        key: auc
+        index: 0
+        sorting: desc
