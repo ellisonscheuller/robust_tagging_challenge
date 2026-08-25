@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: embed-pod
-
+  name: robust-tagging-dev
+  namespace: axol1tl
 spec:
   affinity:
     nodeAffinity:
@@ -15,12 +15,12 @@ spec:
               - "Tesla-V100-SXM2-32GB"
               - "NVIDIA-A100-PCIE-40GB"
               - "NVIDIA-RTX-A6000"
-              # - "NVIDIA-L40"
-              # - "NVIDIA-A100-80GB-PCIe"
-              # - "NVIDIA-A100-SXM4-80GB"
   containers:
-  - name: gpu-container
-    image: gitlab-registry.nrp-nautilus.io/mquinnan/axol1tl-hub:axol1tl-container
+  - name: dev
+    # Build and push from repo root:
+    #   docker build -t <registry>/robust-tagging:latest .
+    #   docker push <registry>/robust-tagging:latest
+    image: REPLACE_ME/robust-tagging:latest
     command: ["sleep", "infinity"]
     env:
       - name: WANDB_API_KEY
@@ -28,16 +28,6 @@ spec:
           secretKeyRef:
             name: wandb-secrets
             key: WANDB_API_KEY
-      - name: GIT_TOKEN
-        valueFrom:
-          secretKeyRef:
-            name: github-secrets
-            key: GIT_TOKEN
-      - name: GIT_USER
-        valueFrom:
-          secretKeyRef:
-            name: github-secrets
-            key: GIT_USER
     resources:
       limits:
         nvidia.com/gpu: 1
@@ -48,21 +38,10 @@ spec:
         memory: 32Gi
         cpu: 8
     volumeMounts:
-    - mountPath: /embedvol
-      name: embedvol
-    # - name: embedcvmfs
-    #   mountPath: /cvmfs
-    #   mountPropagation: HostToContainer
+    - mountPath: /workspace
+      name: robust-tagging
   restartPolicy: Never
   volumes:
-    - name: embedvol
+    - name: robust-tagging
       persistentVolumeClaim:
-        claimName: embedvol
-    # - name: embedcvmfs
-    #   persistentVolumeClaim:
-    #     claimName: embedcvmfs
-    
-  tolerations:
-    - key: "nautilus.io/axol1tl"
-      operator: "Exists"
-      effect: "NoSchedule"
+        claimName: robust-tagging-pvc

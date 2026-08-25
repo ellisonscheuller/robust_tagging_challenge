@@ -7,7 +7,7 @@ import argparse
 import importlib
 import wandb
 from embedding.models import TransformerEncoder, Projector
-from embedding.loss import SupConLoss
+from embedding.loss import InfoNCELoss
 from embedding.training import make_train_val_split, build_train_val_loaders, train_epoch, validate_epoch, EarlyStopping, cosine_schedule_with_warmup, cosine_constrastive_schedule
 from embedding.utils.data_utils import compute_normalization_constants
 from embedding.utils.cfg_handler import train_config, data_config
@@ -27,7 +27,7 @@ formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
-def main(data_path: str, degraded_data_path: str, cfg: train_config, cfg_data: data_config, test_mode: bool = False, outdir: str = "./checkpoints"):
+def main(data_path: str, cfg: train_config, cfg_data: data_config, test_mode: bool = False, outdir: str = "./checkpoints"):
 
     run = wandb.init(
         project="embedding_hlt", 
@@ -82,14 +82,7 @@ def main(data_path: str, degraded_data_path: str, cfg: train_config, cfg_data: d
         map_location="cpu", # load on CPU and move to GPU in DataLoader to avoid GPU memory issues
         max_events=num_events if test_mode else -1,
     )
-    degraded_feature_block, _ = load_data(
-        degraded_data_path,
-        map_location="cpu",
-        max_events=num_events if test_mode else -1,
-    )
     X_tr, y_tr, X_val, y_val, idx_tr, idx_val = make_train_val_split(feature_block, label_block, val_size=val_split)
-    X_tr_aug = degraded_feature_block.index_select(0, idx_tr)
-    X_val_aug = degraded_feature_block.index_select(0, idx_val)
     assert X_tr.device.type == "cpu"
     assert y_tr.device.type == "cpu"
 
@@ -107,7 +100,7 @@ def main(data_path: str, degraded_data_path: str, cfg: train_config, cfg_data: d
     # Build loaders (use train stats for both)
     norm_constants = compute_normalization_constants(X_tr) if not pfcands else {}
     train_loader, val_loader = build_train_val_loaders(
-        X_tr, X_tr_aug, y_tr, X_val, X_val_aug, y_val, device=device, batch_size=batch_size, pfcands=pfcands
+        X_tr, y_tr, X_val, y_val, device=device, batch_size=batch_size, pfcands=pfcands
     )
 
     preproc_class = getattr(importlib.import_module("embedding.preprocs"), preproc_type)
@@ -129,7 +122,7 @@ def main(data_path: str, degraded_data_path: str, cfg: train_config, cfg_data: d
     class_weights = compute_class_weights(label_block, setting=class_weights_setting).to(device)
     ce_loss_fn = nn.CrossEntropyLoss(weight=class_weights)
 
-    criterion = SupConLoss(temperature=contrast_temp)
+    criterion = InfoNCELoss(temperature=contrast_temp)
 
     optimizer = torch.optim.Adam(
         list(preproc.parameters()) +
@@ -257,8 +250,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_cfg", required=True, help="Path to the data config .yaml file") 
     parser.add_argument("--train_cfg", required=True, help="Path to the training config .yaml file")
-    parser.add_argument("--data", required=True, help="Path to the nominal input .pt file")
-    parser.add_argument("--degraded_data", required=True, help="Path to the degraded input .pt file (same events/order as --data)")
+    parser.add_argument("--data", required=True, help="Path to the input .pt file")
     parser.add_argument("--outdir", default="./checkpoints", help="Directory to save model checkpoints and logs")
     parser.add_argument("--test_mode", action="store_true", help="If set, runs training with only 10 percent of the data.")
     args = parser.parse_args()
@@ -272,4 +264,4 @@ if __name__ == "__main__":
     logger.info(f"Using data processing config file: {args.data_cfg}")
     logger.info(f"Entire data processing config: {data_cfg.get_entire_cfg()}")
 
-    main(args.data, args.degraded_data, tr_cfg, data_cfg, test_mode=args.test_mode, outdir=args.outdir)
+    main(args.data, tr_cfg, data_cfg, test_mode=args.test_mode, outdir=args.outdir)

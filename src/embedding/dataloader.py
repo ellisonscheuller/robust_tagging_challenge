@@ -44,15 +44,3 @@ class PFCandsDataset(torch.utils.data.Dataset):
         to_return += (self.labels[idx],) if self.labels is not None else ()
         return to_return
 
-class PairedDataset(torch.utils.data.Dataset):
-    def __init__(self, in_dataset, aug_dataset):
-        self.in_dataset = in_dataset
-        self.aug_dataset = aug_dataset
-
-    def __len__(self) -> int:
-        return len(self.in_dataset)
-
-    def __getitem__(self, idx: int) -> tuple:
-        x_in, mask_in, label = self.in_dataset[idx]
-        x_aug, mask_aug, _ = self.aug_dataset[idx]
-        return x_in, mask_in, x_aug, mask_aug, label

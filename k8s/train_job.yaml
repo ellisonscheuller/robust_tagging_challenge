@@ -1,7 +1,8 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: embed-job
+  name: robust-tagging-train
+  namespace: axol1tl
 spec:
   template:
     spec:
@@ -17,29 +18,28 @@ spec:
                   - "NVIDIA-A100-PCIE-40GB"
                   - "NVIDIA-RTX-A6000"
       containers:
-      - name: gpu-container
-        image: gitlab-registry.nrp-nautilus.io/mquinnan/axol1tl-hub:axol1tl-container
-        # Use a shell script to chain your commands
+      - name: train
+        # Build and push from repo root:
+        #   docker build -t <registry>/robust-tagging:latest .
+        #   docker push <registry>/robust-tagging:latest
+        image: REPLACE_ME/robust-tagging:latest
         command: ["/bin/bash", "-c"]
         args:
           - |
             set -e
-            echo "Cloning repository..."
-            git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/ellisonscheuller/challenge9.git
-            cd challenge9/
+            echo "Pulling latest code..."
+            git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/ellisonscheuller/robust_tagging_challenge.git /tmp/repo
+            cd /tmp/repo
+            pip install --no-cache-dir -q .
 
-            echo "Installing dependencies..."
-            pip3 install .
-            pip3 install wandb
-            
             echo "Starting training..."
-            python3 train.py \
-              --data_cfg=/embedvol/configs/data_config_smcocktail.yaml \
-              --train_cfg=/embedvol/configs/train_config_hlt.yaml \
-              --data=/embedvol/embedding_hlt_smcocktail_train.pt \
-              --degraded_data=/embedvol/embedding_hlt_smcocktail_train_degraded.pt \
-              --outdir=/embedvol/ \
-              --test_mode
+            # NOTE: --degraded_data will be removed once Arianna's on-the-fly
+            # degradation is integrated. For now train.py still requires it.
+            python train.py \
+              --data_cfg=/workspace/configs/data_config.yaml \
+              --train_cfg=/workspace/configs/train_config.yaml \
+              --data=/workspace/data/nominal_train.pt \
+              --outdir=/workspace/checkpoints
         env:
           - name: WANDB_API_KEY
             valueFrom:
@@ -66,15 +66,11 @@ spec:
             memory: 32Gi
             cpu: 8
         volumeMounts:
-        - mountPath: /embedvol
-          name: embedvol
-      restartPolicy: OnFailure 
+        - mountPath: /workspace
+          name: robust-tagging
+      restartPolicy: OnFailure
       volumes:
-        - name: embedvol
+        - name: robust-tagging
           persistentVolumeClaim:
-            claimName: embedvol
-      tolerations:
-        - key: "nautilus.io/axol1tl"
-          operator: "Exists"
-          effect: "NoSchedule"
-  backoffLimit: 2 
+            claimName: robust-tagging-pvc
+  backoffLimit: 2

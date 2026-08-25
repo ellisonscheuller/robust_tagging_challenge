@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from embedding.models import TransformerEncoder, Projector
 from embedding.preprocs import PFPreProcessor
-from embedding.loss import SupConLoss
+from embedding.loss import InfoNCELoss
 from embedding.training import make_train_val_split, build_train_val_loaders, train_epoch, validate_epoch
 from embedding.utils.data_utils import load_data
 
@@ -36,17 +36,14 @@ class Model:
 
     def fit(self):
         feature_block, label_block = load_data(os.path.join(self.data_dir, "train.pt"), map_location="cpu")
-        degraded_block, _ = load_data(os.path.join(self.data_dir, "train_degraded.pt"), map_location="cpu")
 
         X_tr, y_tr, X_val, y_val, idx_tr, idx_val = make_train_val_split(feature_block, label_block, val_size=0.1)
-        X_tr_aug = degraded_block.index_select(0, idx_tr)
-        X_val_aug = degraded_block.index_select(0, idx_val)
 
         train_loader, val_loader = build_train_val_loaders(
-            X_tr, X_tr_aug, y_tr, X_val, X_val_aug, y_val, device=self.device, batch_size=256, pfcands=True
+            X_tr, y_tr, X_val, y_val, device=self.device, batch_size=256, pfcands=True
         )
 
-        criterion = SupConLoss(temperature=0.07)
+        criterion = InfoNCELoss(temperature=0.07)
         ce_loss_fn = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(
             list(self.preproc.parameters()) + list(self.encoder.parameters())
