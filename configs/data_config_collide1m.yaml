@@ -1,0 +1,24 @@
+ds_name: collide1m_pfcands
+
+data_processing:
+  source: collide1m
+  sample_dir: /robust-tagging/collide-1m   # on PVC: /workspace/collide-1m
+  out_path: /workspace/data
+  pfcands: true
+  n_objects: 400
+  sort_by_pt: true
+  sk_spacing: null
+  nevents_per_class: 250000
+  split: 0.8
+
+  samples:
+    - QCD:
+      - QCD_HT50toInf
+    - DY:
+      - DYJetsToLL_13TeV-madgraphMLM-pythia8
+    - TT:
+      - tt0123j_5f_ckm_LO_MLM_leptonic
+      - tt0123j_5f_ckm_LO_MLM_hadronic
+      - tt0123j_5f_ckm_LO_MLM_semiLeptonic
+    - WJets:
+      - WJetsToLNu_13TeV-madgraphMLM-pythia8

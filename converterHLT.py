@@ -204,6 +204,38 @@ def gather_pfcands(tree: uproot.TTree, max_events: int = -1) -> ak.Array:
 
     return combined
 
+def gather_pfcands_collide1m(path: str, max_events: int = -1) -> ak.Array:
+    """Read FullReco PF candidates from a collide1m parquet file.
+
+    Returns an ak.Array with fields (pt, eta, phi, dxy, dxysig, is_pf, pdgId)
+    matching PFPreProcessor's expected input order.
+    """
+    cols = [
+        "FullReco_PFCand_PT",
+        "FullReco_PFCand_Eta",
+        "FullReco_PFCand_Phi",
+        "FullReco_PFCand_PID",
+        "FullReco_PFCand_D0",
+        "FullReco_PFCand_ErrorD0",
+    ]
+    arr = ak.from_parquet(path, columns=cols)
+    if max_events > 0:
+        arr = arr[:max_events]
+
+    d0 = arr["FullReco_PFCand_D0"]
+    err_d0 = arr["FullReco_PFCand_ErrorD0"]
+    pt = arr["FullReco_PFCand_PT"]
+
+    return ak.zip({
+        "pt":     pt,
+        "eta":    arr["FullReco_PFCand_Eta"],
+        "phi":    arr["FullReco_PFCand_Phi"],
+        "dxy":    d0,
+        "dxysig": d0 / (err_d0 + EPS),
+        "is_pf":  ak.ones_like(pt),
+        "pdgId":  arr["FullReco_PFCand_PID"],
+    })
+
 def process_pfcands(
         combined: ak.Array,
         label: int, 
@@ -239,6 +271,7 @@ def main(cfg: data_config, overwrite: bool = False):
 
     os.makedirs(os.path.join(os.getcwd(), "logs"), exist_ok=True)
 
+    source = cfg.get("source", "hlt")
     sample_dir = Path(cfg["sample_dir"]).expanduser()
     redir = cfg.get("redir", "")
     n_objects = cfg.get("n_objects", 500)
@@ -248,6 +281,7 @@ def main(cfg: data_config, overwrite: bool = False):
     sort_by_pt = cfg.get("sort_by_pt", True)
     store_by_class = cfg.get("store_by_class", False)
     split = cfg.get("split", None)
+    logger.info(f"Source: {source}")
     logger.info(f"PFCands mode: {pfcands}")
     logger.info(f"Soft-kill cell size: {sk_cell_size}")
 
@@ -258,32 +292,48 @@ def main(cfg: data_config, overwrite: bool = False):
     file_label_tuples = cfg.get_file_label_map()
     for entry in tqdm(file_label_tuples, desc="Processing files"):
         file_name, label = entry
-        file_path = sample_dir / file_name
-        # Dont use glob if redir is set
-        file_paths = [Path(p) for p in glob.glob(os.fspath(file_path))] if not redir else [file_path]
+
+        if source == "collide1m":
+            folder_path = sample_dir / file_name
+            file_paths = sorted(Path(p) for p in glob.glob(str(folder_path / "*.parquet")))
+            if not file_paths:
+                logger.warning(f"No parquet files found in {folder_path}")
+                continue
+        else:
+            file_path = sample_dir / file_name
+            file_paths = [Path(p) for p in glob.glob(os.fspath(file_path))] if not redir else [file_path]
 
         n_events_left = nevents_per_class
-        for path in file_paths: # Expand possible wildcards
-            src = os.fspath(path) if not redir else join_remote(redir, path)
-            tree = uproot.open(src)["Events"]
-
-            if pfcands:
+        for path in file_paths:
+            if source == "collide1m":
+                combined = gather_pfcands_collide1m(str(path), max_events=n_events_left)
                 event_tensor = process_pfcands(
-                    gather_pfcands(tree, max_events=n_events_left),
+                    combined,
                     label=label,
                     n_objects=n_objects,
-                    sk_cell_size=cfg.get("sk_spacing", None),
+                    sk_cell_size=sk_cell_size,
                     sort_by_pt=sort_by_pt,
                 )
-
             else:
-                pt, eta, phi, dxy, btag, has_dxy, has_btag = gather_particles(tree, max_events=n_events_left)
-                event_tensor = process_particles(
-                    pt, eta, phi, dxy, btag, has_dxy, has_btag, 
-                    label=label, 
-                    n_objects=n_objects,
-                )  
-                
+                src = os.fspath(path) if not redir else join_remote(redir, path)
+                tree = uproot.open(src)["Events"]
+
+                if pfcands:
+                    event_tensor = process_pfcands(
+                        gather_pfcands(tree, max_events=n_events_left),
+                        label=label,
+                        n_objects=n_objects,
+                        sk_cell_size=sk_cell_size,
+                        sort_by_pt=sort_by_pt,
+                    )
+                else:
+                    pt, eta, phi, dxy, btag, has_dxy, has_btag = gather_particles(tree, max_events=n_events_left)
+                    event_tensor = process_particles(
+                        pt, eta, phi, dxy, btag, has_dxy, has_btag,
+                        label=label,
+                        n_objects=n_objects,
+                    )
+
             tensors[label] = tensors.get(label, []) + [event_tensor]
             n_events_left -= event_tensor.shape[0]
             if n_events_left <= 0:

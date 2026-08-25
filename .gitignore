@@ -2,6 +2,7 @@
 __pycache__/
 checkpoints/
 configs/
+!configs/
 wandb/
 plots/
 logs/
@@ -16,4 +17,5 @@ data/
 *.ipynb
 *.yaml
 !codabench/**/*.yaml
+!configs/*.yaml
 *.pt
