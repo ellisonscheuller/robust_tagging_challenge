@@ -15,6 +15,7 @@ data/
 *.pdf
 *.pth
 *.ipynb
+!hackathon_playground.ipynb
 *.yaml
 !codabench/**/*.yaml
 !configs/*.yaml

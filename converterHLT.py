@@ -222,18 +222,24 @@ def gather_pfcands_collide1m(path: str, max_events: int = -1) -> ak.Array:
     if max_events > 0:
         arr = arr[:max_events]
 
-    d0 = arr["FullReco_PFCand_D0"]
-    err_d0 = arr["FullReco_PFCand_ErrorD0"]
-    pt = arr["FullReco_PFCand_PT"]
+    def f32(x):
+        return ak.values_astype(x, np.float32)
+
+    pt     = f32(arr["FullReco_PFCand_PT"])
+    eta    = f32(arr["FullReco_PFCand_Eta"])
+    phi    = f32(arr["FullReco_PFCand_Phi"])
+    pid    = f32(arr["FullReco_PFCand_PID"])
+    d0     = f32(arr["FullReco_PFCand_D0"])
+    err_d0 = f32(arr["FullReco_PFCand_ErrorD0"])
 
     return ak.zip({
         "pt":     pt,
-        "eta":    arr["FullReco_PFCand_Eta"],
-        "phi":    arr["FullReco_PFCand_Phi"],
+        "eta":    eta,
+        "phi":    phi,
         "dxy":    d0,
         "dxysig": d0 / (err_d0 + EPS),
         "is_pf":  ak.ones_like(pt),
-        "pdgId":  arr["FullReco_PFCand_PID"],
+        "pdgId":  pid,
     })
 
 def process_pfcands(
@@ -336,7 +342,7 @@ def main(cfg: data_config, overwrite: bool = False):
 
             tensors[label] = tensors.get(label, []) + [event_tensor]
             n_events_left -= event_tensor.shape[0]
-            if n_events_left <= 0:
+            if nevents_per_class > 0 and n_events_left <= 0:
                 break
     
     class_tensors = {label: torch.cat(chunks, dim=0) for label, chunks in tensors.items()}
@@ -409,6 +415,7 @@ if __name__ == "__main__":
 
     cfg = data_config(args.config)
 
+    os.makedirs("logs", exist_ok=True)
     log_filename = f"logs/converterHLT_{cfg.get_ds_name()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     file_handler = logging.FileHandler(log_filename)
     file_handler.setLevel(logging.INFO)

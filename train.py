@@ -234,13 +234,6 @@ def main(data_path: str, cfg: train_config, cfg_data: data_config, test_mode: bo
             }, step=epoch
         )
 
-        # log lr and contrast weight
-        current_lr = scheduler.get_last_lr()[0]
-        run.log({"Learning Rate": current_lr}, step=epoch)
-        if contrastive_max is not None:
-            current_contrastive_weight = contrastive_schedule.get()
-            run.log({"Contrastive Weight": current_contrastive_weight}, step=epoch)
-
         if es.step(va["loss"]):
             logger.info("Early stopping triggered.")
             break

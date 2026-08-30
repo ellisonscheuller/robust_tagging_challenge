@@ -126,12 +126,12 @@ class PUPPIPreProcessor(nn.Module):
         pt = torch.zeros_like(pt_raw)
         if valid.any():
             pt_log = torch.log1p(pt_raw[valid])
-            pt[valid] = (pt_log - self.norm["pt_min"]) / (self.norm["pt_max"] - self.norm["pt_min"] + EPS)
+            pt[valid] = (pt_log - self.norm_constants["pt_min"]) / (self.norm_constants["pt_max"] - self.norm_constants["pt_min"] + EPS)
 
         # eta: min–max on valid
         eta = torch.zeros_like(eta_raw)
         if valid.any():
-            eta[valid] = (eta_raw[valid] - self.norm["eta_min"]) / (self.norm["eta_max"] - self.norm["eta_min"] + EPS)
+            eta[valid] = (eta_raw[valid] - self.norm_constants["eta_min"]) / (self.norm_constants["eta_max"] - self.norm_constants["eta_min"] + EPS)
 
         # phi:
         phi = torch.zeros_like(phi_raw)
@@ -142,7 +142,7 @@ class PUPPIPreProcessor(nn.Module):
         dxy = torch.zeros_like(dxy_raw)
         dv = valid & has_dxy
         if dv.any():
-            dxy[dv] = (dxy_raw[dv] - self.norm["dxy_min"]) / (self.norm["dxy_max"] - self.norm["dxy_min"] + EPS)
+            dxy[dv] = (dxy_raw[dv] - self.norm_constants["dxy_min"]) / (self.norm_constants["dxy_max"] - self.norm_constants["dxy_min"] + EPS)
 
         # btag: (valid & has_btag)
         btag = torch.zeros_like(btag_raw)

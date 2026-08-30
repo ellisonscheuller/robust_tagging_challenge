@@ -9,77 +9,118 @@ import torch.nn.functional as F
 
 from embedding.models import TransformerEncoder, Projector
 from embedding.preprocs import PFPreProcessor
-from embedding.loss import InfoNCELoss
-from embedding.training import make_train_val_split, build_train_val_loaders, train_epoch, validate_epoch
+from embedding.loss import SupConLoss
+from embedding.training import make_train_val_split, build_train_val_loaders
 from embedding.utils.data_utils import load_data
 
-NUM_CLASSES = 5  # must match the number of classes in the challenge data
+NUM_BG_CLASSES = 4  # QCD, DY, TT, WJets
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# The user submission needs to implement the interface described in the challenge:
-# Model(data_dir, out_dir), then .fit() then .predict(). This is the baseline.
+# =====================================================================
+# PASTE YOUR degrade FUNCTION HERE
+# =====================================================================
+
+def degrade(x: torch.Tensor) -> torch.Tensor:
+    """Baseline: one random dead patch per event."""
+    x = x.clone()
+    B = x.size(0)
+    eta_c = torch.empty(B, 1, device=x.device).uniform_(-2.0, 2.0)
+    phi_c = torch.empty(B, 1, device=x.device).uniform_(-torch.pi, torch.pi)
+    deta  = torch.empty(B, 1, device=x.device).uniform_(0.2, 1.5)
+    dphi  = torch.empty(B, 1, device=x.device).uniform_(0.2, 1.5)
+    eta, phi = x[..., 1], x[..., 2]
+    dead = (
+        (eta >= eta_c - deta / 2) & (eta < eta_c + deta / 2) &
+        (phi >= phi_c - dphi / 2) & (phi < phi_c + dphi / 2) &
+        (x[..., 0] > 0)
+    )
+    x[dead] = 0.0
+    return x
+
+# =====================================================================
+
+
 class Model:
     def __init__(self, data_dir, out_dir):
         self.data_dir = data_dir
         self.out_dir = out_dir
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.preproc = PFPreProcessor(norm_constants={}).to(self.device)
+        self.preproc = PFPreProcessor(norm_constants={}).to(device)
         self.encoder = TransformerEncoder(
             num_features=self.preproc.num_features,
             embed_size=128,
             latent_dim=6,
             num_heads=8,
             num_layers=4,
-        ).to(self.device)
-        self.projector = Projector(6, 12, hidden_dim=48).to(self.device)
-        self.classifier = nn.Linear(12, NUM_CLASSES).to(self.device)
+        ).to(device)
+        self.projector = Projector(6, 12, hidden_dim=48).to(device)
+        self.classifier = nn.Linear(12, NUM_BG_CLASSES).to(device)
+
+    @staticmethod
+    def _cls_mask(x):
+        m = x[..., 0] == 0
+        return torch.cat([torch.zeros(m.size(0), 1, device=m.device, dtype=torch.bool), m], dim=1)
+
+    def _embed(self, x):
+        return F.normalize(self.projector(self.encoder(self.preproc(x), None, self._cls_mask(x))), dim=1)
 
     def fit(self):
-        feature_block, label_block = load_data(os.path.join(self.data_dir, "train.pt"), map_location="cpu")
-
-        X_tr, y_tr, X_val, y_val, idx_tr, idx_val = make_train_val_split(feature_block, label_block, val_size=0.1)
-
+        feature_block, label_block = load_data(
+            os.path.join(self.data_dir, "REPLACE_ME"),  # train file
+            map_location="cpu",
+        )
+        X_tr, y_tr, X_val, y_val, _, _ = make_train_val_split(feature_block, label_block, val_size=0.1)
         train_loader, val_loader = build_train_val_loaders(
-            X_tr, y_tr, X_val, y_val, device=self.device, batch_size=256, pfcands=True
+            X_tr, y_tr, X_val, y_val, device=device, batch_size=256, pfcands=True
         )
 
-        criterion = InfoNCELoss(temperature=0.07)
+        criterion  = SupConLoss(temperature=0.07)
         ce_loss_fn = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(
+        optimizer  = torch.optim.Adam(
             list(self.preproc.parameters()) + list(self.encoder.parameters())
             + list(self.projector.parameters()) + list(self.classifier.parameters()),
             lr=1e-3,
         )
 
         for epoch in range(10):
-            tr = train_epoch(
-                self.encoder, self.projector, self.classifier, ce_loss_fn, criterion,
-                train_loader, {}, self.device, optimizer, self.preproc,
-                contrastive_weight=0.05, num_classes=NUM_CLASSES,
-            )
-            va = validate_epoch(
-                self.encoder, self.projector, self.classifier, ce_loss_fn, criterion,
-                val_loader, {}, self.device, self.preproc,
-                contrastive_weight=0.05, num_classes=NUM_CLASSES,
-            )
-            print(f"epoch {epoch}: train_loss={tr['loss']:.4f} val_loss={va['loss']:.4f} val_acc={va['acc']:.4f}")
+            self.preproc.train(); self.encoder.train(); self.projector.train(); self.classifier.train()
+            for x, _, labels in train_loader:
+                x, labels = x.to(device), labels.to(device)
+                x_aug = degrade(x)
+
+                optimizer.zero_grad()
+                emb_in  = self._embed(x)
+                emb_aug = self._embed(x_aug)
+                features = torch.stack([emb_in, emb_aug], dim=1)
+                loss = criterion(features, labels) + ce_loss_fn(self.classifier(emb_in), labels)
+                loss.backward()
+                optimizer.step()
+
+            self.preproc.eval(); self.encoder.eval(); self.projector.eval(); self.classifier.eval()
+            val_loss = val_correct = 0
+            with torch.no_grad():
+                for x, _, labels in val_loader:
+                    x, labels = x.to(device), labels.to(device)
+                    emb    = self._embed(x)
+                    logits = self.classifier(emb)
+                    val_loss    += ce_loss_fn(logits, labels).item() * x.size(0)
+                    val_correct += (logits.argmax(1) == labels).float().sum().item()
+            N = len(val_loader.dataset)
+            print(f"epoch {epoch+1}/10  val_loss={val_loss/N:.4f}  val_acc={val_correct/N:.4f}")
 
     @torch.no_grad()
-    def _predict_one(self, path):
-        features = torch.load(path, map_location="cpu")
-        mask = features[..., 0] == 0
-        cls_mask = torch.cat([torch.zeros(mask.size(0), 1, dtype=torch.bool), mask], dim=1).to(self.device)
-        latent = self.encoder(self.preproc(features.to(self.device)), None, cls_mask)
-        embedding = F.normalize(self.projector(latent), dim=1)
-        return torch.softmax(self.classifier(embedding), dim=1).cpu().numpy()
+    def _anomaly_scores(self, path):
+        features = torch.load(path, map_location=device)
+        self.preproc.eval(); self.encoder.eval(); self.projector.eval(); self.classifier.eval()
+        emb      = self._embed(features)
+        bg_probs = torch.softmax(self.classifier(emb), dim=1)
+        anomaly  = 1.0 - bg_probs.max(dim=1).values
+        return torch.stack([1.0 - anomaly, anomaly], dim=1).cpu().numpy()
 
     def predict(self):
-        self.preproc.eval(); self.encoder.eval(); self.projector.eval(); self.classifier.eval()
+        np.save(os.path.join(self.out_dir, "pred_nominal.npy"),
+                self._anomaly_scores(os.path.join(self.data_dir, "REPLACE_ME")))  # eval nominal (private)
 
-        preds = self._predict_one(os.path.join(self.data_dir, "eval_nominal.pt"))
-        np.save(os.path.join(self.out_dir, "pred_nominal.npy"), preds)
-
-        for path in glob.glob(os.path.join(self.data_dir, "eval_degraded", "*.pt")):
-            severity = re.search(r"\d+", os.path.basename(path)).group()
-            preds = self._predict_one(path)
-            np.save(os.path.join(self.out_dir, f"pred_severity_{severity}.npy"), preds)
+        for path in glob.glob(os.path.join(self.data_dir, "REPLACE_ME", "*.pt")):  # eval degraded (private)
+            sev = re.search(r"\d+", os.path.basename(path)).group()
+            np.save(os.path.join(self.out_dir, f"pred_severity_{sev}.npy"), self._anomaly_scores(path))

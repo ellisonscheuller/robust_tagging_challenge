@@ -11,7 +11,7 @@ sys.path.append(submission_dir)
 ## Path to the train/validation data and input test data
 ## needed for the user submission
 ## Make sure to share this path with the service account mlchallenges
-input_dir = '/eos/user/REPLACE_ME/challenge9/train'
+input_dir = 'REPLACE_ME'  # NRP PVC mount path for train data + public eval files
 
 def main():
     from model import Model

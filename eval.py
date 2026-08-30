@@ -128,7 +128,8 @@ def plot_auc_vs_severity(severities, aucs, outdir):
     plt.savefig(os.path.join(outdir, "auc_vs_severity.png"), dpi=300)
     plt.close()
 
-    area = np.trapz(aucs, severities) / (severities[-1] - severities[0])
+    denom = severities[-1] - severities[0]
+    area = np.trapz(aucs, severities) / denom if denom > 0 else aucs[0]
     print(f"area under AUC-vs-severity curve: {area:.4f}")
 
 def plot_tsne_zero_fraction(latents, zero_frac, outdir):

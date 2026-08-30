@@ -1,15 +1,15 @@
 version: 2
-title: Challenge 9 - Robust Tagging Under Changing Detector Conditions
+title: Challenge 3 - Robust Tagging Under Changing Detector Conditions
 description: Train a representation that stays robust when parts of the eta-phi plane go dead (simulated detector degradation), scored by AUC vs. degradation severity.
 image: icon.png
 registration_auto_approve: True
 
-## Image used both when codabench runs the user submission and
-## to create notebooks on Kubeflow.
-docker_image: registry.cern.ch/REPLACE_ME/challenge9:v0.0.1
+## Image must be pushed to the NRP registry under the fastml26-hackathon namespace.
+## docker build -t registry.nrp-nautilus.io/fastml26-hackathon/challenge3:v0.0.1 .
+## docker push registry.nrp-nautilus.io/fastml26-hackathon/challenge3:v0.0.1
+docker_image: registry.nrp-nautilus.io/fastml26-hackathon/challenge3:v0.0.1
 
-## Queues define the kind and number of GPUs that submissions can use
-## Choose your queue here: https://ngt.cern.ch/challenges/queues/
+## NRP queue — find available queues in the Codabench admin panel
 queue: REPLACE_ME
 
 terms: pages/terms.md

@@ -1,4 +1,4 @@
-ds_name: robust_tagging_train_data
+ds_name: robust_tagging_eval_public
 
 data_processing:
   source: collide1m
@@ -8,17 +8,17 @@ data_processing:
   n_objects: 400
   sort_by_pt: true
   sk_spacing: null
-  nevents_per_class: 250000
-  split: 0.8
+  nevents_per_class: 50000
 
+  # Binary labels: background = 0, signal = 1.
+  # This is the public eval set — HH->4b signal, participants can test on this.
   samples:
-    - QCD:
+    - background:
       - QCD_HT50toInf
-    - DY:
       - DYJetsToLL_13TeV-madgraphMLM-pythia8
-    - TT:
       - tt0123j_5f_ckm_LO_MLM_leptonic
       - tt0123j_5f_ckm_LO_MLM_hadronic
       - tt0123j_5f_ckm_LO_MLM_semiLeptonic
-    - WJets:
       - WJetsToLNu_13TeV-madgraphMLM-pythia8
+    - signal:
+      - HH_4b

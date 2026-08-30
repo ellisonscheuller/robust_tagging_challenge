@@ -14,8 +14,8 @@ def clean_data(data: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     feature_block = data[..., :-1]
     label_block = data[:, 0, -1].long()
 
-    if not torch.isfinite(feature_block).any():
-        raise ValueError("feature_block has no finite values after cleaning.")
+    if not torch.isfinite(feature_block).all():
+        raise ValueError("feature_block contains NaNs/Infs after cleaning.")
 
     return feature_block, label_block
 

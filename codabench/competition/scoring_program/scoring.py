@@ -17,7 +17,7 @@ score_dir = '/app/output/'
 ## share the same underlying events/labels). Must be shared with the service
 ## account mlchallenges, and swapped to the final-phase data when the
 ## competition moves from Development Phase to Testing Phase.
-reference_dir = "/eos/user/REPLACE_ME/challenge9/test"
+reference_dir = "REPLACE_ME"  # NRP PVC mount path for held-out labels (secret eval)
 
 def parse_severity(path):
     return int(re.search(r"\d+", os.path.basename(path)).group())
@@ -39,7 +39,8 @@ for path in severity_files:
     severities.append(parse_severity(path))
     aucs.append(auc_for(path, labels, num_classes))
 
-robustness_auc = np.trapz(aucs, severities) / (severities[-1] - severities[0])
+denom = severities[-1] - severities[0]
+robustness_auc = np.trapz(aucs, severities) / denom if denom > 0 else aucs[0]
 scores = {"auc": robustness_auc}
 # END CUSTOM CODE
 
