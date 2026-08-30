@@ -17,28 +17,8 @@ NUM_BG_CLASSES = 4  # QCD, DY, TT, WJets
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # =====================================================================
-# PASTE YOUR degrade FUNCTION HERE
+# YOUR Model CLASS — change anything
 # =====================================================================
-
-def degrade(x: torch.Tensor) -> torch.Tensor:
-    """Baseline: one random dead patch per event."""
-    x = x.clone()
-    B = x.size(0)
-    eta_c = torch.empty(B, 1, device=x.device).uniform_(-2.0, 2.0)
-    phi_c = torch.empty(B, 1, device=x.device).uniform_(-torch.pi, torch.pi)
-    deta  = torch.empty(B, 1, device=x.device).uniform_(0.2, 1.5)
-    dphi  = torch.empty(B, 1, device=x.device).uniform_(0.2, 1.5)
-    eta, phi = x[..., 1], x[..., 2]
-    dead = (
-        (eta >= eta_c - deta / 2) & (eta < eta_c + deta / 2) &
-        (phi >= phi_c - dphi / 2) & (phi < phi_c + dphi / 2) &
-        (x[..., 0] > 0)
-    )
-    x[dead] = 0.0
-    return x
-
-# =====================================================================
-
 
 class Model:
     def __init__(self, data_dir, out_dir):
@@ -55,6 +35,24 @@ class Model:
         ).to(device)
         self.projector = Projector(6, 12, hidden_dim=48).to(device)
         self.classifier = nn.Linear(12, NUM_BG_CLASSES).to(device)
+
+    @staticmethod
+    def _degrade(x: torch.Tensor) -> torch.Tensor:
+        """Baseline augmentation: kill one random eta-phi patch per event."""
+        x = x.clone()
+        B = x.size(0)
+        eta_c = torch.empty(B, 1, device=x.device).uniform_(-2.0, 2.0)
+        phi_c = torch.empty(B, 1, device=x.device).uniform_(-torch.pi, torch.pi)
+        deta  = torch.empty(B, 1, device=x.device).uniform_(0.2, 1.5)
+        dphi  = torch.empty(B, 1, device=x.device).uniform_(0.2, 1.5)
+        eta, phi = x[..., 1], x[..., 2]
+        dead = (
+            (eta >= eta_c - deta / 2) & (eta < eta_c + deta / 2) &
+            (phi >= phi_c - dphi / 2) & (phi < phi_c + dphi / 2) &
+            (x[..., 0] > 0)
+        )
+        x[dead] = 0.0
+        return x
 
     @staticmethod
     def _cls_mask(x):
@@ -86,7 +84,7 @@ class Model:
             self.preproc.train(); self.encoder.train(); self.projector.train(); self.classifier.train()
             for x, _, labels in train_loader:
                 x, labels = x.to(device), labels.to(device)
-                x_aug = degrade(x)
+                x_aug = self._degrade(x)
 
                 optimizer.zero_grad()
                 emb_in  = self._embed(x)
