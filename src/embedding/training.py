@@ -71,10 +71,14 @@ def train_epoch(
     encoder, projector, classifier,
     ce_loss_fn, contrastive_loss,
     train_loader, norm_constants, device,
-    optimizer, preproc, scheduler=None, contrastive_weight=0.05,
+    optimizer, preproc,
+    degradation=None,
+    scheduler=None, contrastive_weight=0.05,
     pairwise=False, num_classes=4,
     scaler=None
 ):
+    if degradation is not None:
+        degradation.train()
     encoder.train(); projector.train(); classifier.train(); preproc.train()
 
     total_loss = total_contrast = total_ce = 0.0
@@ -84,6 +88,8 @@ def train_epoch(
 
     for x, mask, labels in train_loader:
         x = x.to(device)
+        if degradation is not None:
+            x = degradation(x)
         mask = mask.to(device)
         labels = labels.to(device)
 
@@ -142,9 +148,12 @@ def validate_epoch(
     encoder, projector, classifier,
     ce_loss_fn, contrastive_loss,
     val_loader, norm_constants, device, preproc,
+    degradation=None,
     contrastive_weight=0.05,
     pairwise=False, num_classes=4
 ):
+    if degradation is not None:
+        degradation.eval()
     encoder.eval(); projector.eval(); classifier.eval(); preproc.eval()
 
     total_loss = total_contrast = total_ce = 0.0
@@ -154,6 +163,8 @@ def validate_epoch(
 
     for x, mask, labels in val_loader:
         x = x.to(device)
+        if degradation is not None:
+            x = degradation(x)
         mask = mask.to(device)
         labels = labels.to(device)
 

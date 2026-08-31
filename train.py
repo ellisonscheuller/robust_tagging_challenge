@@ -12,6 +12,7 @@ from embedding.training import make_train_val_split, build_train_val_loaders, tr
 from embedding.utils.data_utils import compute_normalization_constants
 from embedding.utils.cfg_handler import train_config, data_config
 from embedding.utils.data_utils import compute_class_weights, load_data
+from embedding.degradation import Degradation
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 os.makedirs("checkpoints", exist_ok=True)
@@ -103,8 +104,10 @@ def main(data_path: str, cfg: train_config, cfg_data: data_config, test_mode: bo
         X_tr, y_tr, X_val, y_val, device=device, batch_size=batch_size, pfcands=pfcands
     )
 
+    degradation = Degradation().to(device).train()
+
     preproc_class = getattr(importlib.import_module("embedding.preprocs"), preproc_type)
-    
+
     preproc = preproc_class(norm_constants).to(device).train()
     encoder = TransformerEncoder(
         num_features=preproc.num_features,
@@ -172,6 +175,7 @@ def main(data_path: str, cfg: train_config, cfg_data: data_config, test_mode: bo
             device,
             optimizer,
             preproc,
+            degradation=degradation,
             scheduler=scheduler, 
             contrastive_weight=contrastive_weight if contrastive_max is None else contrastive_schedule,
             pairwise=pairwise, 
@@ -188,6 +192,7 @@ def main(data_path: str, cfg: train_config, cfg_data: data_config, test_mode: bo
             norm_constants, 
             device,
             preproc,
+            degradation=degradation,
             contrastive_weight=contrastive_weight if contrastive_max is None else contrastive_schedule,
             pairwise=pairwise, 
             num_classes=num_classes
