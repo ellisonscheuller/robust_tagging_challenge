@@ -2,14 +2,13 @@ ds_name: robust_tagging_train_data
 
 data_processing:
   source: collide1m
-  sample_dir: /robust-tagging/collide-1m   # on PVC: /workspace/collide-1m
-  out_path: /robust-tagging/preprocessed_data
+  sample_dir: /hackathon-data/C9_robust_tagging/train
+  out_path: /hackathon-data/C9_robust_tagging/pt_files
   pfcands: true
   n_objects: 400
   sort_by_pt: true
   sk_spacing: null
   nevents_per_class: 250000
-  split: 0.8
 
   samples:
     - QCD:

@@ -1,9 +1,9 @@
-ds_name: robust_tagging_eval_public
+ds_name: robust_tagging_eval
 
 data_processing:
   source: collide1m
-  sample_dir: /robust-tagging/collide-1m   # on PVC: /workspace/collide-1m
-  out_path: /robust-tagging/preprocessed_data
+  sample_dir: /hackathon-data/C9_robust_tagging/eval
+  out_path: /hackathon-data/C9_robust_tagging/pt_files
   pfcands: true
   n_objects: 400
   sort_by_pt: true
@@ -11,7 +11,7 @@ data_processing:
   nevents_per_class: 50000
 
   # Binary labels: background = 0, signal = 1.
-  # This is the public eval set — HH->4b signal, participants can test on this.
+  # Combined eval set — both HH->4b and Four Top signals.
   samples:
     - background:
       - QCD_HT50toInf
@@ -22,3 +22,4 @@ data_processing:
       - WJetsToLNu_13TeV-madgraphMLM-pythia8
     - signal:
       - HH_4b
+      - tttt_incl

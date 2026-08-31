@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: robust-tagging-convert-train
+  namespace: fastml26-hackathon
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      containers:
+      - name: convert
+        # Build and push from repo root:
+        #   docker build -t registry.nrp-nautilus.io/fastml26-hackathon/challenge3:v0.0.1 .
+        #   docker push registry.nrp-nautilus.io/fastml26-hackathon/challenge3:v0.0.1
+        image: registry.nrp-nautilus.io/fastml26-hackathon/challenge3:v0.0.1
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            set -e
+            echo "Pulling latest code..."
+            git clone https://github.com/ellisonscheuller/robust_tagging_challenge.git /tmp/repo
+            cd /tmp/repo
+            pip install --no-cache-dir -q .
+            # TODO(temporary): pyarrow isn't in the image yet; ak.from_parquet needs it.
+            # Remove this once pyarrow is added to the Dockerfile and the image is rebuilt.
+            pip install --no-cache-dir -q pyarrow
+
+            echo "Starting conversion (train, SM backgrounds, 4-class)..."
+            python converterHLT.py --config configs/data_config_collide1m.yaml
+        resources:
+          limits:
+            memory: 120Gi
+            cpu: 8
+          requests:
+            memory: 120Gi
+            cpu: 8
+        volumeMounts:
+        - mountPath: /hackathon-data
+          name: hackathon-data
+      restartPolicy: Never
+      volumes:
+        - name: hackathon-data
+          persistentVolumeClaim:
+            claimName: hackathon-data

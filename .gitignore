@@ -19,4 +19,5 @@ data/
 *.yaml
 !codabench/**/*.yaml
 !configs/*.yaml
+!k8s/*.yaml
 *.pt
