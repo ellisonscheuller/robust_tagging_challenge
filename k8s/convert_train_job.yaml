@@ -21,9 +21,6 @@ spec:
             git clone https://github.com/ellisonscheuller/robust_tagging_challenge.git /tmp/repo
             cd /tmp/repo
             pip install --no-cache-dir -q .
-            # TODO(temporary): pyarrow isn't in the image yet; ak.from_parquet needs it.
-            # Remove this once pyarrow is added to the Dockerfile and the image is rebuilt.
-            pip install --no-cache-dir -q pyarrow
 
             echo "Starting conversion (train, SM backgrounds, 4-class)..."
             python converterHLT.py --config configs/data_config_collide1m.yaml

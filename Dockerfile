@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir \
     matplotlib \
     uproot \
     awkward \
+    pyarrow \
     tqdm
 
 COPY . /robust_tagging
