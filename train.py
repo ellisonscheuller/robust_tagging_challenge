@@ -104,7 +104,7 @@ def main(data_path: str, cfg: train_config, cfg_data: data_config, test_mode: bo
         X_tr, y_tr, X_val, y_val, device=device, batch_size=batch_size, pfcands=pfcands
     )
 
-    degradation = Degradation().to(device).train()
+    degradation = Degradation(severity=None).to(device).train()
 
     preproc_class = getattr(importlib.import_module("embedding.preprocs"), preproc_type)
 

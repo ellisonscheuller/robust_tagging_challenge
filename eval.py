@@ -17,6 +17,7 @@ from embedding.models import TransformerEncoder, EvalMLP
 from embedding.dataloader import PFCandsDataset, PUPPIDataset
 from embedding.utils.data_utils import load_data, delta_r_from_normalized
 from embedding.utils.cfg_handler import train_config, data_config
+from embedding.degradation import Degradation
 
 def build_preproc_and_encoder(cfg: train_config, checkpoint: dict, device: str):
     preproc_type = cfg.get_trdata_cfg("preproc_type", "PFPreProcessor")
@@ -43,7 +44,7 @@ def build_preproc_and_encoder(cfg: train_config, checkpoint: dict, device: str):
     return preproc, encoder, norm_constants
 
 @torch.no_grad()
-def embed_dataset(preproc, encoder, feature_block, label_block, cfg_data, norm_constants, device, batch_size=1024):
+def embed_dataset(preproc, encoder, feature_block, label_block, cfg_data, norm_constants, device, batch_size=1024, degradation=None):
     pfcands = cfg_data.get("pfcands", True)
     dataset_cls = PFCandsDataset if pfcands else PUPPIDataset
     dataset = dataset_cls(feature_block, label_block, device)
@@ -54,6 +55,8 @@ def embed_dataset(preproc, encoder, feature_block, label_block, cfg_data, norm_c
 
     for x, mask, y in loader:
         x = x.to(device)
+        if degradation is not None:
+            x = degradation(x)
         mask = mask.to(device)
         zero_frac.append(mask.float().mean(dim=1).cpu())
 
@@ -168,26 +171,25 @@ def main(args):
     )
     probe = train_linear_probe(X_train, y_train, num_classes, device)
 
-    severity_files = sorted(glob.glob(os.path.join(args.degraded_dir, "*.pt")), key=parse_severity)
-    if not severity_files:
-        raise FileNotFoundError(f"no .pt files found in --degraded_dir: {args.degraded_dir}")
+    severities = list(np.linspace(args.sev_min, args.sev_max, args.num_severities))
 
-    severities = [0]
+    results_severities = [0]
     aucs = [probe_auc(probe, X_test, y_test, num_classes, device)]
     diag_latents = [nominal_latents]
     diag_zero_frac = [nominal_zero_frac]
-    for path in severity_files:
-        severity = parse_severity(path)
-        deg_features, deg_labels = load_data(path, map_location="cpu")
+
+    for severity in severities:
+        degradation = Degradation(severity=severity).to(device).eval()
         deg_latents, deg_labels, deg_zero_frac = embed_dataset(
-            preproc, encoder, deg_features, deg_labels, cfg_data, norm_constants, device
+            preproc, encoder, nominal_features, nominal_labels, cfg_data, norm_constants, device,
+            degradation=degradation
         )
-        severities.append(severity)
+        results_severities.append(severity)
         aucs.append(probe_auc(probe, deg_latents, deg_labels, num_classes, device))
         diag_latents.append(deg_latents)
         diag_zero_frac.append(deg_zero_frac)
 
-    plot_auc_vs_severity(severities, aucs, args.outdir)
+    plot_auc_vs_severity(results_severities, aucs, args.outdir)
 
     if args.diagnostics:
         plot_tsne_zero_fraction(torch.cat(diag_latents), torch.cat(diag_zero_frac), args.outdir)
@@ -198,7 +200,9 @@ if __name__ == "__main__":
     parser.add_argument("--data_cfg", required=True, help="Data config .yaml used to train the encoder")
     parser.add_argument("--encoder", required=True, help="Path to a checkpoint saved by train.py")
     parser.add_argument("--data", required=True, help="Nominal (non-degraded) eval .pt file")
-    parser.add_argument("--degraded_dir", required=True, help="Directory of per-severity degraded eval .pt files")
+    parser.add_argument("--sev_min", type=float, default=0.0, help="Minimum degradation severity")
+    parser.add_argument("--sev_max", type=float, default=1.0, help="Maximum degradation severity")
+    parser.add_argument("--num_severities", type=int, default=10, help="Number of severity levels to sweep")
     parser.add_argument("--outdir", default="./evalPlots")
     parser.add_argument("--diagnostics", action="store_true", help="Also produce the zero-fraction latent diagnostic")
     main(parser.parse_args())
