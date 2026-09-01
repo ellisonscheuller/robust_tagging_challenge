@@ -9,20 +9,20 @@ spec:
     spec:
       containers:
       - name: convert
-        # Build and push from repo root:
-        #   docker build -t registry.nrp-nautilus.io/fastml26-hackathon/challenge3:v0.0.1 .
-        #   docker push registry.nrp-nautilus.io/fastml26-hackathon/challenge3:v0.0.1
-        image: registry.nrp-nautilus.io/fastml26-hackathon/challenge3:v0.0.1
+        # TODO: switch to the custom registry.nrp-nautilus.io/fastml26-hackathon/challenge3
+        # image once that registry situation is sorted out. For now, use the public base
+        # image and install everything at runtime.
+        image: pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
         command: ["/bin/bash", "-c"]
         args:
           - |
             set -e
-            echo "Pulling latest code..."
-            git clone https://github.com/ellisonscheuller/robust_tagging_challenge.git /tmp/repo
-            cd /tmp/repo
-            pip install --no-cache-dir -q .
+            echo "=== Job started: $(date) ==="
 
-            echo "Starting conversion (eval, HH->4b + Four Top signal, combined)..."
+            cd /hackathon-data/C9_robust_tagging/escheuller-dev
+            pip install --quiet -e . awkward pyarrow tqdm
+
+            echo "=== Conversion (eval, HH->4b + Four Top signal, combined): $(date) ==="
             python converterHLT.py --config configs/data_config_eval.yaml
         resources:
           limits:

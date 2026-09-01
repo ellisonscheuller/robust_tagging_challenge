@@ -73,17 +73,24 @@ def main(data_path: str, cfg: train_config, cfg_data: data_config, test_mode: bo
     scaler = torch.cuda.amp.GradScaler(enabled=((device=="cuda") and mixed_prec))
 
     # Load and split
-    if test_mode:
-        num_events = int(0.10 * cfg_data.get("nevents_per_class") * cfg_data.get_file_label_map().__len__())
-        logger.info("Test mode enabled: using only 10% of the data for training and validation.")
-        logger.info(f"Number of events: {num_events} (10% of total)")
-
     feature_block, label_block = load_data(
         data_path,
         map_location="cpu", # load on CPU and move to GPU in DataLoader to avoid GPU memory issues
-        max_events=num_events if test_mode else -1,
+        max_events=-1,
     )
+    if test_mode:
+        # cfg_data's nevents_per_class is -1 ("keep every available event") in every config we
+        # have, so it can't be used to size the test split - use 10% of what actually loaded.
+        num_events = int(0.10 * feature_block.shape[0])
+        feature_block = feature_block[:num_events]
+        label_block = label_block[:num_events]
+        logger.info("Test mode enabled: using only 10% of the data for training and validation.")
+        logger.info(f"Number of events: {num_events} (10% of total)")
+
+    num_pf_objects = feature_block.shape[1]
     X_tr, y_tr, X_val, y_val, idx_tr, idx_val = make_train_val_split(feature_block, label_block, val_size=val_split)
+    del feature_block  # X_tr/X_val are independent copies (index_select); the original full-size
+    # tensor is otherwise unused for the rest of training and was being held in memory for no reason.
     assert X_tr.device.type == "cpu"
     assert y_tr.device.type == "cpu"
 
@@ -116,7 +123,7 @@ def main(data_path: str, cfg: train_config, cfg_data: data_config, test_mode: bo
         num_heads=num_heads,
         num_layers=num_layers,
         linear_dim=linear_dim, 
-        num_tokens=feature_block.size(1) if linear_dim is not None else None,
+        num_tokens=num_pf_objects if linear_dim is not None else None,
         pairwise=pairwise,
     ).to(device).train()
     projector = Projector(latent_dim, proj_dim, hidden_dim=(proj_dim*4)).to(device).train()

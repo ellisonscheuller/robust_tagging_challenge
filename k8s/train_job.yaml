@@ -2,75 +2,60 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: robust-tagging-train
-  namespace: axol1tl
+  namespace: fastml26-hackathon
 spec:
+  backoffLimit: 0
   template:
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: nvidia.com/gpu.product
-                operator: In
-                values:
-                  - "Tesla-V100-SXM2-32GB"
-                  - "NVIDIA-A100-PCIE-40GB"
-                  - "NVIDIA-RTX-A6000"
+      restartPolicy: Never
       containers:
       - name: train
-        # Build and push from repo root:
-        #   docker build -t <registry>/robust-tagging:latest .
-        #   docker push <registry>/robust-tagging:latest
-        image: REPLACE_ME/robust-tagging:latest
+        image: gitlab-registry.nrp-nautilus.io/escheuller/robust_tagging_challenge:latest
         command: ["/bin/bash", "-c"]
         args:
           - |
             set -e
-            echo "Pulling latest code..."
-            git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/ellisonscheuller/robust_tagging_challenge.git /tmp/repo
-            cd /tmp/repo
-            pip install --no-cache-dir -q .
+            echo "=== Job started: $(date) ==="
+            python -c "import torch; print('CUDA:', torch.cuda.is_available(), '| Device:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'cpu')"
 
-            echo "Starting training..."
-            # NOTE: --degraded_data will be removed once Arianna's on-the-fly
-            # degradation is integrated. For now train.py still requires it.
+            cd /hackathon-data/C9_robust_tagging/escheuller-dev
+            pip install --quiet -e .
+
+            export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+            OUTDIR=/hackathon-data/C9_robust_tagging/checkpoints
+            mkdir -p "$OUTDIR"
+
+            echo "=== Training: $(date) ==="
             python train.py \
-              --data_cfg=/workspace/configs/data_config.yaml \
-              --train_cfg=/workspace/configs/train_config.yaml \
-              --data=/workspace/data/nominal_train.pt \
-              --outdir=/workspace/checkpoints
+              --data_cfg  configs/data_config_collide1m.yaml \
+              --train_cfg configs/train_config.yaml \
+              --data      /hackathon-data/C9_robust_tagging/pt_files/robust_tagging_train_data.pt \
+              --outdir    "$OUTDIR"
         env:
+          # Create the secret once (see comment at bottom of this file):
+          #   kubectl -n fastml26-hackathon create secret generic wandb-secrets \
+          #     --from-literal=WANDB_API_KEY=<key>
           - name: WANDB_API_KEY
             valueFrom:
               secretKeyRef:
                 name: wandb-secrets
                 key: WANDB_API_KEY
-          - name: GIT_TOKEN
-            valueFrom:
-              secretKeyRef:
-                name: github-secrets
-                key: GIT_TOKEN
-          - name: GIT_USER
-            valueFrom:
-              secretKeyRef:
-                name: github-secrets
-                key: GIT_USER
+          - name: WANDB_MODE
+            value: online
         resources:
           limits:
             nvidia.com/gpu: 1
-            memory: 32Gi
-            cpu: 8
+            memory: 40Gi
+            cpu: 4
           requests:
             nvidia.com/gpu: 1
-            memory: 32Gi
-            cpu: 8
+            memory: 40Gi
+            cpu: 4
         volumeMounts:
-        - mountPath: /workspace
-          name: robust-tagging
-      restartPolicy: OnFailure
+        - mountPath: /hackathon-data
+          name: hackathon-data
       volumes:
-        - name: robust-tagging
+        - name: hackathon-data
           persistentVolumeClaim:
-            claimName: robust-tagging-pvc
-  backoffLimit: 2
+            claimName: hackathon-data

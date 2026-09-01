@@ -8,7 +8,7 @@ data_processing:
   n_objects: 400
   sort_by_pt: true
   sk_spacing: null
-  nevents_per_class: 250000
+  nevents_per_class: -1   # keep every available event per class
 
   samples:
     - QCD:

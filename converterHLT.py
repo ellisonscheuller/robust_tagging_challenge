@@ -7,245 +7,60 @@ from tqdm import tqdm
 import glob
 import torch
 import numpy as np
-import uproot
 import awkward as ak
 from typing import Union
 
-from embedding.utils.cfg_handler import data_config, join_remote
-from embedding.utils.data_utils import softkill, EPS
-uproot.source.xrootd.XRootDSource.timeout = 480
+from embedding.utils.cfg_handler import data_config
+from embedding.utils.data_utils import softkill
 
 # Making it possible to log to file as well as to console
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("converterHLT")
 
-def process_particles(
-        pt: ak.Array, eta: ak.Array, phi: ak.Array, dxy: ak.Array, btag: ak.Array, has_dxy: ak.Array, has_btag: ak.Array, 
-        label: int, 
-        n_objects: int = 200,
-        sort_by_pt: bool = False,
-    ) -> torch.Tensor:
-    particles = ak.zip({"pt": pt, "eta": eta, "phi": phi, "dxy": dxy, "btag": btag, "has_dxy": has_dxy, "has_btag": has_btag})
-    if sort_by_pt:
-        logger.info("Sorting particles by pt")
-        particles = particles[ak.argsort(particles.pt, axis=1, ascending=False)]
-    counts = ak.num(particles.pt, axis=1)
-    clipped_events = counts > n_objects
-    if ak.any(clipped_events):
-        lost = int(ak.sum(counts[clipped_events] - n_objects))
-        logger.warning(f"{int(ak.sum(clipped_events))} events clipped; {lost} particles lost. Increase n_objects to avoid this.")
-    padded = ak.pad_none(particles, n_objects, axis=1, clip=True)
-    array = np.stack(
-        [
-            ak.to_numpy(padded["pt"]),
-            ak.to_numpy(padded["eta"]),
-            ak.to_numpy(padded["phi"]),
-            ak.to_numpy(padded["dxy"]),
-            ak.to_numpy(padded["btag"]),
-            ak.to_numpy(padded["has_dxy"]),
-            ak.to_numpy(padded["has_btag"])
-        ],
-        axis=-1,
-    )
-    tensor = torch.tensor(array, dtype=torch.float32)
-    label_tensor = torch.full((tensor.shape[0], n_objects, 1), label, dtype=torch.float32)
-    return torch.cat([tensor, label_tensor], dim=-1)
-
-def gather_particles(tree: uproot.TTree, max_events: int = -1) -> tuple[ak.Array, ak.Array, ak.Array, ak.Array, ak.Array, ak.Array, ak.Array]:
-    """Return per-event arrays of pt, eta, phi, pid for the TrigObj objects we keep."""
-
-    # ---- Jets ---------------------
-    jet_pt = tree["ScoutingPFJetRecluster_pt"].array(entry_stop=max_events)
-    jet_eta = tree["ScoutingPFJetRecluster_eta"].array(entry_stop=max_events)
-    jet_phi = tree["ScoutingPFJetRecluster_phi"].array(entry_stop=max_events)
-    jet_dxy = ak.zeros_like(jet_pt)  # no dxy for jets
-    jet_btag = (tree["ScoutingPFJetRecluster_particleNet_prob_bb"].array(entry_stop=max_events) + tree["ScoutingPFJetRecluster_particleNet_prob_b"].array(entry_stop=max_events)) # Probability of being b-jet
-    jet_has_dxy  = ak.zeros_like(jet_pt, dtype=np.int8)  # 0
-    jet_has_btag = ak.ones_like(jet_pt,  dtype=np.int8)  # 1
-    jets = ak.zip({"pt": jet_pt, "eta": jet_eta, "phi": jet_phi, "dxy": jet_dxy, "btag": jet_btag, "has_dxy": jet_has_dxy, "has_btag": jet_has_btag})
-
-    # ---- Muons -------------------------------------------------------------
-    mu_pt = tree["ScoutingMuonVtx_pt"].array(entry_stop=max_events)
-    mu_eta = tree["ScoutingMuonVtx_eta"].array(entry_stop=max_events)
-    mu_phi = tree["ScoutingMuonVtx_phi"].array(entry_stop=max_events)
-    mu_dxy = tree["ScoutingMuonVtx_trk_dxy"].array(entry_stop=max_events)
-    mu_btag = ak.zeros_like(mu_pt)  # no b-tag for muons
-    # Using dtype that accomodates well true/false values when converted to torch
-    mu_has_dxy  = ak.ones_like(mu_pt,  dtype=np.int8)  # 1
-    mu_has_btag = ak.zeros_like(mu_pt, dtype=np.int8)  # 0
-    muons = ak.zip({"pt": mu_pt, "eta": mu_eta, "phi": mu_phi, "dxy": mu_dxy, "btag": mu_btag, "has_dxy": mu_has_dxy, "has_btag": mu_has_btag})
-
-    # ---- Egamma (electrons + photons) ------------------------------
-    e_pt = tree["ScoutingElectron_pt"].array(entry_stop=max_events)
-    e_eta = tree["ScoutingElectron_eta"].array(entry_stop=max_events)
-    e_phi = tree["ScoutingElectron_phi"].array(entry_stop=max_events)
-    e_dxy = ak.zeros_like(e_pt)  # no dxy for electrons
-    e_btag = ak.zeros_like(e_pt)  # no b-tag for electrons
-    e_has_dxy  = ak.zeros_like(e_pt, dtype=np.int8) # 0
-    e_has_btag = ak.zeros_like(e_pt, dtype=np.int8) # 0
-    electrons = ak.zip({"pt": e_pt, "eta": e_eta, "phi": e_phi, "dxy": e_dxy, "btag": e_btag, "has_dxy": e_has_dxy, "has_btag": e_has_btag})
-
-    photons_pt = tree["ScoutingPhoton_pt"].array(entry_stop=max_events)
-    photons_eta = tree["ScoutingPhoton_eta"].array(entry_stop=max_events)
-    photons_phi = tree["ScoutingPhoton_phi"].array(entry_stop=max_events)
-    photons_dxy = ak.zeros_like(photons_pt)  # no dxy for photons
-    photons_btag = ak.zeros_like(photons_pt)  # no b-tag for photons
-    photons_has_dxy  = ak.zeros_like(photons_pt, dtype=np.int8) # 0
-    photons_has_btag = ak.zeros_like(photons_pt, dtype=np.int8) # 0
-    photons = ak.zip({"pt": photons_pt, "eta": photons_eta, "phi": photons_phi, "dxy": photons_dxy, "btag": photons_btag, "has_dxy": photons_has_dxy, "has_btag": photons_has_btag})
-
-    # ---- Energy sums --------------
-
-    ESum_pt = tree["ScoutingMET_pt"].array(entry_stop=max_events)
-    ESum_phi = tree["ScoutingMET_phi"].array(entry_stop=max_events)
-    ESum_eta = ak.zeros_like(ESum_pt)  # no well-defined eta; keep 0
-    ESum_dxy = ak.zeros_like(ESum_pt)  # no dxy for Esum
-    Esum_btag = ak.zeros_like(ESum_pt)  # no b-tag for Esum
-    ESum_has_dxy  = ak.zeros_like(ESum_pt, dtype=np.int8) # 0
-    ESum_has_btag = ak.zeros_like(ESum_pt, dtype=np.int8) # 0
-    ESum = ak.zip({"pt": ESum_pt, "eta": ESum_eta, "phi": ESum_phi, "dxy": ESum_dxy, "btag": Esum_btag,"has_dxy": ESum_has_dxy, "has_btag": ESum_has_btag})
-    ESum = ESum[:, np.newaxis]
-
-    # ---- Concatenate everything  --------------------
-    combined = ak.concatenate([jets, muons, electrons, photons, ESum], axis=1)
-
-    return combined["pt"], combined["eta"], combined["phi"], combined["dxy"], combined["btag"], combined["has_dxy"], combined["has_btag"]    
-
-def construct_pf_features(branches: ak.Array) -> ak.Array:
-    """
-    Branches:
-        - pt
-        - eta
-        - phi
-        - dxy
-        - dxysig
-        - pdgId (includes sign for charge)
-        - is_pf
-    """
-
-    # PF candidates
-    branches["ScoutingParticle_is_pf"] = ak.ones_like(branches["ScoutingParticle_pt"])
-
-    # ScoutingMuonNoVtx
-    branches["ScoutingMuonNoVtx_dxy"] = branches["ScoutingMuonNoVtx_trk_dxy"]
-    branches["ScoutingMuonNoVtx_dxysig"] = branches["ScoutingMuonNoVtx_trk_dxy"] / (branches["ScoutingMuonNoVtx_trk_dxyError"] + EPS)
-    branches["ScoutingMuonNoVtx_pdgId"] = branches["ScoutingMuonNoVtx_charge"] * 13
-    branches["ScoutingMuonNoVtx_is_pf"] = ak.zeros_like(branches["ScoutingMuonNoVtx_pt"])
-
-    # ScoutingElectron
-    branches["ScoutingElectron_dxy"] = -branches["ScoutingElectron_bestTrack_d0"]  # d0 = -dxy
-    branches["ScoutingElectron_dxysig"] = ak.zeros_like(branches["ScoutingElectron_pt"]) # dxysig = 0 since no error provided
-    branches["ScoutingElectron_pdgId"] = branches["ScoutingElectron_bestTrack_charge"] * 11
-    branches["ScoutingElectron_is_pf"] = ak.zeros_like(branches["ScoutingElectron_pt"])
-
-    # ScoutingPhoton
-    branches["ScoutingPhoton_dxy"] = ak.zeros_like(branches["ScoutingPhoton_pt"])
-    branches["ScoutingPhoton_dxysig"] = ak.zeros_like(branches["ScoutingPhoton_pt"])
-    branches["ScoutingPhoton_pdgId"] = ak.ones_like(branches["ScoutingPhoton_pt"]) * 22
-    branches["ScoutingPhoton_is_pf"] = ak.zeros_like(branches["ScoutingPhoton_pt"])
-
-    return branches
-
-def gather_pfcands(tree: uproot.TTree, max_events: int = -1) -> ak.Array:
-    """Return per-event tensors of PF candidates"""
-
-    branches = tree.arrays([
-        # PF candidates
-        "ScoutingParticle_pt",
-        "ScoutingParticle_eta",
-        "ScoutingParticle_phi",
-        "ScoutingParticle_dxy",
-        "ScoutingParticle_dxysig",
-        "ScoutingParticle_pdgId",
-        # Muons No Vtx
-        "ScoutingMuonNoVtx_pt",
-        "ScoutingMuonNoVtx_eta",
-        "ScoutingMuonNoVtx_phi",
-        "ScoutingMuonNoVtx_trk_dxy",
-        "ScoutingMuonNoVtx_trk_dxyError",
-        "ScoutingMuonNoVtx_charge",
-        # Electrons
-        "ScoutingElectron_pt",
-        "ScoutingElectron_eta",
-        "ScoutingElectron_phi",
-        "ScoutingElectron_bestTrack_d0", # d0 = -dxy
-        "ScoutingElectron_bestTrack_charge",
-        # Photons
-        "ScoutingPhoton_pt",
-        "ScoutingPhoton_eta",
-        "ScoutingPhoton_phi",
-    ], entry_stop=max_events)
-
-    branches = construct_pf_features(branches)
-
-    branch_prefixes = [
-        "ScoutingParticle_",
-        "ScoutingMuonNoVtx_",
-        "ScoutingElectron_",
-        "ScoutingPhoton_",
-    ]
-    feature_names = [
-        "pt", 
-        "eta", 
-        "phi", 
-        "dxy", 
-        "dxysig",
-        "is_pf",
-        "pdgId",
-    ]
-
-    combined = ak.concatenate([
-        ak.zip({ftr_name: branches[prefix + ftr_name] for ftr_name in feature_names})
-        for prefix in branch_prefixes
-    ], axis=1)
-
-    # Log name of fields in combiend ak arr
-    logger.info("PF candidate fields: " + ", ".join(combined.fields))
-
-    return combined
-
 def gather_pfcands_collide1m(path: str, max_events: int = -1) -> ak.Array:
     """Read FullReco PF candidates from a collide1m parquet file.
+
+    The parquet files store PF candidates in a single nested struct column
+    ``FullReco_PFPart`` whose sub-fields are per-event jagged lists:
+    ``pt, eta, phi, dxy, dxysig, pdgId, charge, ...``.
 
     Returns an ak.Array with fields (pt, eta, phi, dxy, dxysig, is_pf, pdgId)
     matching PFPreProcessor's expected input order.
     """
-    cols = [
-        "FullReco_PFCand_PT",
-        "FullReco_PFCand_Eta",
-        "FullReco_PFCand_Phi",
-        "FullReco_PFCand_PID",
-        "FullReco_PFCand_D0",
-        "FullReco_PFCand_ErrorD0",
-    ]
-    arr = ak.from_parquet(path, columns=cols)
+    arr = ak.from_parquet(path, columns=["FullReco_PFPart"])
     if max_events > 0:
         arr = arr[:max_events]
+
+    part = arr["FullReco_PFPart"]
 
     def f32(x):
         return ak.values_astype(x, np.float32)
 
-    pt     = f32(arr["FullReco_PFCand_PT"])
-    eta    = f32(arr["FullReco_PFCand_Eta"])
-    phi    = f32(arr["FullReco_PFCand_Phi"])
-    pid    = f32(arr["FullReco_PFCand_PID"])
-    d0     = f32(arr["FullReco_PFCand_D0"])
-    err_d0 = f32(arr["FullReco_PFCand_ErrorD0"])
+    pt     = f32(part["pt"])
+    eta    = f32(part["eta"])
+    phi    = f32(part["phi"])
+    dxy    = f32(part["dxy"])
+    dxysig = f32(part["dxysig"])
+    # pdgId is stored unsigned (abs value); re-apply the sign from the charge
+    # field so PFPreProcessor can derive particle charge from pdgId sign.
+    abs_pid = ak.values_astype(part["pdgId"], np.int64)
+    charge  = ak.values_astype(part["charge"], np.int64)
+    signed_pid = ak.where(charge != 0, abs_pid * charge, abs_pid)
 
     return ak.zip({
         "pt":     pt,
         "eta":    eta,
         "phi":    phi,
-        "dxy":    d0,
-        "dxysig": d0 / (err_d0 + EPS),
+        "dxy":    dxy,
+        "dxysig": dxysig,
         "is_pf":  ak.ones_like(pt),
-        "pdgId":  pid,
+        "pdgId":  f32(signed_pid),
     })
 
 def process_pfcands(
         combined: ak.Array,
-        label: int, 
-        n_objects: int = 200, 
+        label: int,
+        n_objects: int = 200,
         sk_cell_size: Union[float, None] = None,
         sort_by_pt: bool = False,
     ) -> torch.Tensor:
@@ -273,22 +88,17 @@ def process_pfcands(
     return torch.cat([tensor, label_tensor], dim=-1)
 
 def main(cfg: data_config, overwrite: bool = False):
-    """Convert one or more ROOT files to fixed-shape PyTorch tensors and save train/test splits."""
+    """Convert collide1m parquet files to fixed-shape PyTorch tensors and save train/test splits."""
 
     os.makedirs(os.path.join(os.getcwd(), "logs"), exist_ok=True)
 
-    source = cfg.get("source", "hlt")
     sample_dir = Path(cfg["sample_dir"]).expanduser()
-    redir = cfg.get("redir", "")
     n_objects = cfg.get("n_objects", 500)
     nevents_per_class = cfg.get("nevents_per_class", -1)
-    pfcands = cfg.get("pfcands", True)
     sk_cell_size = cfg.get("sk_spacing", None)
     sort_by_pt = cfg.get("sort_by_pt", True)
     store_by_class = cfg.get("store_by_class", False)
     split = cfg.get("split", None)
-    logger.info(f"Source: {source}")
-    logger.info(f"PFCands mode: {pfcands}")
     logger.info(f"Soft-kill cell size: {sk_cell_size}")
 
     if split and store_by_class:
@@ -299,55 +109,35 @@ def main(cfg: data_config, overwrite: bool = False):
     for entry in tqdm(file_label_tuples, desc="Processing files"):
         file_name, label = entry
 
-        if source == "collide1m":
-            folder_path = sample_dir / file_name
-            file_paths = sorted(Path(p) for p in glob.glob(str(folder_path / "*.parquet")))
-            if not file_paths:
-                logger.warning(f"No parquet files found in {folder_path}")
-                continue
-        else:
-            file_path = sample_dir / file_name
-            file_paths = [Path(p) for p in glob.glob(os.fspath(file_path))] if not redir else [file_path]
+        folder_path = sample_dir / file_name
+        file_paths = sorted(Path(p) for p in glob.glob(str(folder_path / "*.parquet")))
+        if not file_paths:
+            logger.warning(f"No parquet files found in {folder_path}")
+            continue
 
         n_events_left = nevents_per_class
         for path in file_paths:
-            if source == "collide1m":
-                combined = gather_pfcands_collide1m(str(path), max_events=n_events_left)
-                event_tensor = process_pfcands(
-                    combined,
-                    label=label,
-                    n_objects=n_objects,
-                    sk_cell_size=sk_cell_size,
-                    sort_by_pt=sort_by_pt,
-                )
-            else:
-                src = os.fspath(path) if not redir else join_remote(redir, path)
-                tree = uproot.open(src)["Events"]
-
-                if pfcands:
-                    event_tensor = process_pfcands(
-                        gather_pfcands(tree, max_events=n_events_left),
-                        label=label,
-                        n_objects=n_objects,
-                        sk_cell_size=sk_cell_size,
-                        sort_by_pt=sort_by_pt,
-                    )
-                else:
-                    pt, eta, phi, dxy, btag, has_dxy, has_btag = gather_particles(tree, max_events=n_events_left)
-                    event_tensor = process_particles(
-                        pt, eta, phi, dxy, btag, has_dxy, has_btag,
-                        label=label,
-                        n_objects=n_objects,
-                    )
+            combined = gather_pfcands_collide1m(str(path), max_events=n_events_left)
+            event_tensor = process_pfcands(
+                combined,
+                label=label,
+                n_objects=n_objects,
+                sk_cell_size=sk_cell_size,
+                sort_by_pt=sort_by_pt,
+            )
 
             tensors[label] = tensors.get(label, []) + [event_tensor]
             n_events_left -= event_tensor.shape[0]
             if nevents_per_class > 0 and n_events_left <= 0:
                 break
-    
+
     class_tensors = {label: torch.cat(chunks, dim=0) for label, chunks in tensors.items()}
 
     for label in class_tensors:
+        # Shuffle across the per-sample chunks before capping so a class made of
+        # several samples doesn't get filled entirely from whichever sample comes
+        # first (and is largest). With nevents_per_class <= 0 nothing is dropped.
+        class_tensors[label] = class_tensors[label][torch.randperm(class_tensors[label].shape[0])]
         if nevents_per_class > 0:
             class_tensors[label] = class_tensors[label][:nevents_per_class]
 
@@ -378,7 +168,7 @@ def main(cfg: data_config, overwrite: bool = False):
             raise FileExistsError(f"Output files with prefix {output_prefix} already exist in {os.fspath(out_path)}. Use --overwrite to overwrite.")
         train_tensor = full_tensor[:split_idx]
         test_tensor = full_tensor[split_idx:]
-        
+
         n_events_per_class_train = torch.bincount(train_tensor[:, 0, -1].to(torch.int64))
         n_events_per_class_test = torch.bincount(test_tensor[:, 0, -1].to(torch.int64))
         logger.info("Train class event counts:")

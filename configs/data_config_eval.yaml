@@ -8,7 +8,7 @@ data_processing:
   n_objects: 400
   sort_by_pt: true
   sk_spacing: null
-  nevents_per_class: 50000
+  nevents_per_class: -1   # keep every available event per class (~104k bkg, ~21k sig)
 
   # Binary labels: background = 0, signal = 1.
   # Combined eval set — both HH->4b and Four Top signals.

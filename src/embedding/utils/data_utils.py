@@ -8,7 +8,7 @@ def ensure_finite(name, tensor):
         raise ValueError(f"{name} has NaNs/Infs")
 
 def clean_data(data: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    data = torch.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+    data.nan_to_num_(nan=0.0, posinf=0.0, neginf=0.0)
     if not torch.isfinite(data).all():
         raise ValueError("Input data contains NaNs/Infs that could not be cleaned.")
     feature_block = data[..., :-1]

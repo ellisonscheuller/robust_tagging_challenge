@@ -18,9 +18,9 @@ spec:
   containers:
   - name: dev
     # Build and push from repo root:
-    #   docker build -t <registry>/robust-tagging:latest .
-    #   docker push <registry>/robust-tagging:latest
-    image: REPLACE_ME/robust-tagging:latest
+    #   docker build -t gitlab-registry.nrp-nautilus.io/escheuller/robust_tagging_challenge:latest .
+    #   docker push gitlab-registry.nrp-nautilus.io/escheuller/robust_tagging_challenge:latest
+    image: gitlab-registry.nrp-nautilus.io/escheuller/robust_tagging_challenge:latest
     command: ["sleep", "infinity"]
     env:
       - name: WANDB_API_KEY
