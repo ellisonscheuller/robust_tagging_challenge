@@ -147,6 +147,19 @@ def plot_tsne_zero_fraction(latents, zero_frac, outdir):
     plt.savefig(os.path.join(outdir, "tsne_zero_fraction_diagnostic.png"), dpi=300)
     plt.close()
 
+def drop_grace_period(latents, labels, zero_frac, n):
+    """Discard the first n samples (grace period) from recorded outputs.
+    Make sure the order of lantents/labels/zero_frac is the same as
+    the order in which the input data was given to the model. 
+    """
+    if n <= 0:
+        return latents, labels, zero_frac
+    if n >= len(labels):
+        raise ValueError(
+            f"grace_period ({n}) must be smaller than the number of samples ({len(labels)})"
+        )
+    return latents[n:], labels[n:], zero_frac[n:]
+
 def main(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     os.makedirs(args.outdir, exist_ok=True)
@@ -162,6 +175,11 @@ def main(args):
     nominal_features, nominal_labels = load_data(args.data, map_location="cpu")
     nominal_latents, nominal_labels, nominal_zero_frac = embed_dataset(
         preproc, encoder, nominal_features, nominal_labels, cfg_data, norm_constants, device
+    )
+
+    # Remove grace period, during which model was still learning detector conditions
+    nominal_latents, nominal_labels, nominal_zero_frac = drop_grace_period(
+        nominal_latents, nominal_labels, nominal_zero_frac, args.grace_period
     )
 
     plot_tsne_by_class(nominal_latents, nominal_labels, label_name_map, args.outdir)
@@ -184,6 +202,12 @@ def main(args):
             preproc, encoder, nominal_features, nominal_labels, cfg_data, norm_constants, device,
             degradation=degradation
         )
+
+        # Remove grace period, during which model was still learning detector conditions
+        deg_latents, deg_labels, deg_zero_frac = drop_grace_period(
+            deg_latents, deg_labels, deg_zero_frac, args.grace_period
+        )
+
         results_severities.append(severity)
         aucs.append(probe_auc(probe, deg_latents, deg_labels, num_classes, device))
         diag_latents.append(deg_latents)
@@ -203,6 +227,7 @@ if __name__ == "__main__":
     parser.add_argument("--sev_min", type=float, default=0.0, help="Minimum degradation severity")
     parser.add_argument("--sev_max", type=float, default=1.0, help="Maximum degradation severity")
     parser.add_argument("--num_severities", type=int, default=10, help="Number of severity levels to sweep")
+    parser.add_argument("--grace_period", type=int, default=1000, help="Number of initial warm-up samples to let the model learn detector conditions.")
     parser.add_argument("--outdir", default="./evalPlots")
     parser.add_argument("--diagnostics", action="store_true", help="Also produce the zero-fraction latent diagnostic")
     main(parser.parse_args())
