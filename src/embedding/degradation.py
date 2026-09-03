@@ -1,4 +1,3 @@
-import math
 import torch
 import torch.nn as nn
 
@@ -10,8 +9,7 @@ class Degradation(nn.Module):
         # Your degradation should be a function of severity
         # Severity of 0 should represent no degradation
         # Severity can then scale however you would like 
-        severity: float = None,
-        # Do not add any other aguments here!
+        severity: float = 0.0,
     ):
         super().__init__()
         self.severity = severity
@@ -29,11 +27,5 @@ class Degradation(nn.Module):
         pt = x[..., 0]
         eta = x[..., 1]
         phi = x[..., 2]
-
-        if self.severity is not None:
-            # During training, severity is set to None
-            # This allows you to randomly sample different severities during training
-            # An simple example would be:
-            self.severity = torch.rand(1).item()
 
         return x
